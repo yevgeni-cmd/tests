@@ -1,0 +1,38 @@
+# ----------------------------------------------------------------
+#                 Example Variables File
+#
+# Create a file named 'terraform.tfvars' and copy the contents
+# of this file into it. Then, set your required values.
+# ----------------------------------------------------------------
+
+# (Required) The name of the AWS profile in your ~/.aws/credentials file.
+aws_profile = "YOUR_PROFILE_NAME_HERE"
+
+# (Required) The name of an existing EC2 Key Pair in the primary region
+# for SSH access to the instances.
+ssh_key_name = "my-ssh-key"
+
+
+# --- VPN Configuration ---
+
+# (Required) The ARN of a server certificate from AWS Certificate Manager (ACM)
+# located in the 'primary_region' (il-central-1) for the TRUSTED VPN.
+trusted_vpn_server_cert_arn = "arn:aws:acm:il-central-1:123456789012:certificate/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# (Required) The ARN of a server certificate from AWS Certificate Manager (ACM)
+# located in the 'primary_region' (il-central-1) for the UNTRUSTED VPN.
+untrusted_vpn_server_cert_arn = "arn:aws:acm:il-central-1:123456789012:certificate/yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy"
+
+# To use SAML/MFA for VPN authentication, uncomment the following lines and
+# provide the ARN of the SAML Identity Provider you have configured in AWS IAM.
+# vpn_authentication_type    = "saml"
+# saml_identity_provider_arn = "arn:aws:iam::123456789012:saml-provider/YourIdPName"
+
+
+# --- Optional Variables ---
+# You can override the default values from variables.tf here if needed.
+
+# project_name = "my-new-project"
+# instance_os  = "ubuntu"
+trusted_ssh_key_name = ""
+untrusted_ssh_key_name = ""
