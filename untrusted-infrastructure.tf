@@ -93,11 +93,10 @@ module "untrusted_ingress_host" {
   instance_type       = var.default_instance_type
   subnet_id           = module.untrusted_vpc_streaming_ingress.public_subnets_by_name["ec2"].id
   vpc_id              = module.untrusted_vpc_streaming_ingress.vpc_id
-  #custom_ami_id = var.untrusted_custom_ami_id != null ? var.untrusted_custom_ami_id : var.custom_ami_id
   associate_public_ip = true
 }
 
-# Streaming Scrub Host with UDP forwarding
+# Streaming Scrub Host  
 module "untrusted_scrub_host" {
   source        = "./modules/ec2_instance"
   providers     = { aws = aws.primary }
@@ -107,12 +106,6 @@ module "untrusted_scrub_host" {
   instance_type = var.default_instance_type
   subnet_id     = module.untrusted_vpc_streaming_scrub.private_subnets_by_name["app"].id
   vpc_id        = module.untrusted_vpc_streaming_scrub.vpc_id
-  custom_ami_id = var.untrusted_custom_ami_id != null ? var.untrusted_custom_ami_id : var.custom_ami_id
-  user_data     = base64encode(templatefile("${path.module}/user-data/untrusted-scrub-userdata.sh", {
-    trusted_scrub_vpc_cidr = var.trusted_vpc_cidrs["streaming_scrub"]
-    udp_port              = var.srt_udp_ports[0]
-    aws_region            = var.primary_region
-   }))
 }
 
 # DevOps Agent
@@ -125,6 +118,5 @@ module "untrusted_devops_agent" {
   instance_type       = var.default_instance_type
   subnet_id           = module.untrusted_vpc_devops.public_subnets_by_name["agent"].id
   vpc_id              = module.untrusted_vpc_devops.vpc_id
-  custom_ami_id = var.untrusted_custom_ami_id != null ? var.untrusted_custom_ami_id : var.custom_ami_id
   associate_public_ip = true
 }

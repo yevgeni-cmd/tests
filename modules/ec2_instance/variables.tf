@@ -76,15 +76,3 @@ variable "ami_owners" {
     ubuntu = "099720109477" # Canonical's AWS account ID
   }
 }
-
-variable "user_data" {
-  description = "User data script to run on instance launch"
-  type        = string
-  default     = null
-}
-
-variable "custom_ami_id" {
-  description = "Custom AMI ID to use instead of auto-discovery"
-  type        = string
-  default     = null
-}

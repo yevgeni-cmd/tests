@@ -1,5 +1,3 @@
-# Replace the trusted-infrastructure.tf file with this updated version
-
 ################################################################################
 # TRUSTED ENVIRONMENT (IL) - Infrastructure
 ################################################################################
@@ -96,7 +94,7 @@ module "trusted_vpc_jacob" {
 
 # --- Trusted EC2 Instances ---
 
-# Trusted Scrub Host (receives UDP from untrusted via peering) - STANDARD AMI
+# Trusted Scrub Host (receives UDP from untrusted via peering)
 module "trusted_scrub_host" {
   source        = "./modules/ec2_instance"
   providers     = { aws = aws.primary }
@@ -106,11 +104,9 @@ module "trusted_scrub_host" {
   instance_type = var.default_instance_type
   subnet_id     = module.trusted_vpc_streaming_scrub.private_subnets_by_name["app"].id
   vpc_id        = module.trusted_vpc_streaming_scrub.vpc_id
-  # Use standard AMI (not GPU AMI)
-  custom_ami_id = var.trusted_custom_ami_id != null ? var.trusted_custom_ami_id : var.custom_ami_id
 }
 
-# Trusted DevOps Agent (in public subnet with internet access) - STANDARD AMI
+# Trusted DevOps Agent (in public subnet with internet access)
 module "trusted_devops_agent" {
   source              = "./modules/ec2_instance"
   providers           = { aws = aws.primary }
@@ -121,30 +117,17 @@ module "trusted_devops_agent" {
   subnet_id           = module.trusted_vpc_devops.public_subnets_by_name["agent"].id
   vpc_id              = module.trusted_vpc_devops.vpc_id
   associate_public_ip = true
-  # Use standard AMI (not GPU AMI)
-  custom_ami_id       = var.trusted_custom_ami_id != null ? var.trusted_custom_ami_id : var.custom_ami_id
 }
 
-# Trusted Streaming Docker Host (in VPC Streaming VOD) - GPU AMI WHEN ENABLED
+# Trusted Streaming Docker Host (in VPC Streaming VOD)
 module "trusted_streaming_host" {
   source        = "./modules/ec2_instance"
   providers     = { aws = aws.primary }
   instance_name = "${var.project_name}-trusted-streaming-host"
   key_name      = var.trusted_ssh_key_name
   instance_os   = var.instance_os
-  instance_type = var.streaming_host_use_gpu ? var.gpu_instance_type : var.default_instance_type
+  instance_type = var.default_instance_type
+  # KEEP streaming-docker subnet as per architecture
   subnet_id     = module.trusted_vpc_streaming.private_subnets_by_name["streaming-docker"].id
   vpc_id        = module.trusted_vpc_streaming.vpc_id
-  
-  # SELECTIVE AMI LOGIC: GPU AMI only if GPU enabled AND gpu_ami_id provided
-  custom_ami_id = var.streaming_host_use_gpu && var.gpu_custom_ami_id != null ? (
-    var.gpu_custom_ami_id
-  ) : (
-    var.trusted_custom_ami_id != null ? var.trusted_custom_ami_id : var.custom_ami_id
-  )
-  
-  # GPU optimization user data only when using GPU
-  user_data = var.streaming_host_use_gpu ? base64encode(templatefile("${path.module}/user-data/gpu-optimization-userdata.sh", {
-    aws_region = var.primary_region
-  })) : null
 }

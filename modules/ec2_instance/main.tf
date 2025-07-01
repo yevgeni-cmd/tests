@@ -8,10 +8,9 @@ terraform {
 }
 
 data "aws_ami" "selected" {
-  count       = var.custom_ami_id == null ? 1 : 0
   most_recent = true
   owners      = [var.ami_owners[var.instance_os]]
-  
+
   filter {
     name   = "name"
     values = [var.ami_filters[var.instance_os]]
@@ -21,12 +20,6 @@ data "aws_ami" "selected" {
     values = ["hvm"]
   }
 }
-
-locals {
-  ami_id = var.custom_ami_id != null ? var.custom_ami_id : data.aws_ami.selected[0].id
-}
-
-
 
 resource "aws_iam_role" "ec2_role" {
   name               = "${var.instance_name}-role"
@@ -92,13 +85,12 @@ resource "aws_security_group" "this" {
 }
 
 resource "aws_instance" "this" {
-  ami                         = local.ami_id
+  ami                         = data.aws_ami.selected.id
   instance_type               = var.instance_type
   key_name                    = var.key_name
   subnet_id                   = var.subnet_id
   vpc_security_group_ids      = [aws_security_group.this.id]
   iam_instance_profile        = aws_iam_instance_profile.ec2_profile.name
   associate_public_ip_address = var.associate_public_ip
-  user_data                   = var.user_data
   tags                        = { Name = var.instance_name }
 }
