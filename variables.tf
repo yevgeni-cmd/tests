@@ -163,3 +163,54 @@ variable "srt_udp_ports" {
   type        = list(number)
   default     = [8090]
 }
+
+################################################################################
+# Custom AMI Variables
+################################################################################
+
+variable "custom_ami_id" {
+  description = "Default custom AMI ID with Docker and tools pre-installed. Used as fallback when specific environment AMIs are not provided."
+  type        = string
+  default     = null
+}
+
+variable "trusted_custom_ami_id" {
+  description = "Custom AMI ID for trusted environment instances (standard AMI with Docker and tools)."
+  type        = string
+  default     = null
+}
+
+variable "untrusted_custom_ami_id" {
+  description = "Custom AMI ID for untrusted environment instances (standard AMI with Docker and tools)."
+  type        = string
+  default     = null
+}
+
+variable "gpu_custom_ami_id" {
+  description = "GPU-enabled custom AMI ID specifically for streaming host. Only used when streaming_host_use_gpu=true. Includes NVIDIA drivers and GPU-optimized Docker."
+  type        = string
+  default     = null
+}
+
+################################################################################
+# Instance Type and GPU Variables
+################################################################################
+
+variable "gpu_instance_type" {
+  description = "GPU instance type for trusted streaming host when GPU is enabled."
+  type        = string
+  default     = "g4dn.xlarge"
+  validation {
+    condition = contains([
+      "g4dn.large", "g4dn.xlarge", "g4dn.2xlarge", "g4dn.4xlarge",
+      "g5.large", "g5.xlarge", "g5.2xlarge", "g5.4xlarge"
+    ], var.gpu_instance_type)
+    error_message = "GPU instance type must be a valid GPU-enabled instance type (g4dn.* or g5.*)."
+  }
+}
+
+variable "streaming_host_use_gpu" {
+  description = "Whether to use GPU instance type and GPU-enabled AMI for trusted streaming host. Enables hardware-accelerated video processing."
+  type        = bool
+  default     = false
+}

@@ -56,8 +56,18 @@ resource "aws_ec2_client_vpn_authorization_rule" "this" {
   authorize_all_groups   = true
 }
 
+# Create routes only for networks that are NOT the associated VPC
+# AWS automatically creates a route for the associated VPC, so we exclude it
+locals {
+  # Filter out the association network CIDR to avoid duplicate routes
+  filtered_network_cidrs = {
+    for k, v in var.authorized_network_cidrs : k => v
+    if v != var.association_network_cidr
+  }
+}
+
 resource "aws_ec2_client_vpn_route" "this" {
-  for_each               = var.authorized_network_cidrs
+  for_each               = local.filtered_network_cidrs
   client_vpn_endpoint_id = aws_ec2_client_vpn_endpoint.this.id
   destination_cidr_block = each.value
   target_vpc_subnet_id   = var.target_vpc_subnet_id
