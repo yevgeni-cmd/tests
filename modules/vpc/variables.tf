@@ -1,77 +1,65 @@
 variable "name" {
-  description = "The name of the VPC and a prefix for its resources."
+  description = "Name prefix for all resources"
   type        = string
 }
 
 variable "cidr" {
-  description = "The CIDR block for the VPC."
+  description = "CIDR block for the VPC"
   type        = string
+  validation {
+    condition     = can(cidrhost(var.cidr, 0))
+    error_message = "The CIDR block must be a valid IPv4 CIDR."
+  }
 }
 
 variable "azs" {
-  description = "A list of Availability Zones to use for the subnets."
+  description = "List of availability zones"
   type        = list(string)
 }
 
-variable "subnets" {
-  description = "A map of subnet configurations. Key is the logical name. Value contains cidr_suffix and type ('public' or 'private')."
-  type        = map(object({
-    cidr_suffix = number
-    type        = string
-    name        = string
-    az          = optional(string)
-  }))
-}
-
-variable "tgw_id" {
-  description = "The ID of the Transit Gateway to attach this VPC to."
+variable "aws_region" {
+  description = "AWS region"
   type        = string
-  default     = null
 }
 
-variable "tgw_routes" {
-  description = "A map of routes to add to the VPC's route tables for TGW connectivity."
-  type        = map(string)
-  default     = {}
+variable "public_subnet_names" {
+  description = "List of public subnet names"
+  type        = list(string)
+  default     = []
+}
+
+variable "private_subnet_names" {
+  description = "List of private subnet names"
+  type        = list(string)
+  default     = []
 }
 
 variable "create_igw" {
-  description = "If true, an Internet Gateway will be created for this VPC."
+  description = "Whether to create an Internet Gateway"
   type        = bool
   default     = false
 }
 
 variable "create_nat_gateway" {
-  description = "If true, a NAT Gateway will be created in a 'public' subnet."
+  description = "Whether to create a NAT Gateway"
   type        = bool
   default     = false
 }
 
+variable "tgw_id" {
+  description = "Transit Gateway ID for attachment"
+  type        = string
+  default     = null
+}
+
 variable "vpc_endpoints" {
-  description = "A list of AWS services to create VPC endpoints for (e.g., 's3', 'ecr.api')."
+  description = "List of VPC endpoints to create"
   type        = list(string)
   default     = []
 }
 
-variable "aws_region" {
-  description = "The AWS region where the VPC is being created."
-  type        = string
-}
-
-variable "manage_nacl" {
-  description = "Flag to create and manage a Network ACL for the app subnet."
+variable "create_custom_dns" {
+  description = "Whether to create custom Route53 records for VPC endpoints"
   type        = bool
   default     = false
-}
-
-variable "nacl_udp_ports" {
-  description = "A list of UDP ports to allow in the Network ACL."
-  type        = list(number)
-  default     = []
-}
-
-variable "nacl_ssh_source_cidr" {
-  description = "The source CIDR for SSH traffic in the NACL (typically the VPN client CIDR)."
-  type        = string
-  default     = null
 }

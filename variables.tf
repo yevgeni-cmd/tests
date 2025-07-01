@@ -1,3 +1,7 @@
+################################################################################
+# Core Configuration Variables
+################################################################################
+
 variable "aws_profile" {
   description = "The AWS CLI profile to use for authentication."
   type        = string
@@ -6,7 +10,7 @@ variable "aws_profile" {
 variable "project_name" {
   description = "A name for the project to prefix resources."
   type        = string
-  default     = "multi-env-arch"
+  default     = "final-arch"
 }
 
 variable "primary_region" {
@@ -21,7 +25,10 @@ variable "remote_region" {
   default     = "eu-west-1"
 }
 
-# --- TGW Variables ---
+################################################################################
+# Transit Gateway Variables
+################################################################################
+
 variable "trusted_asn" {
   description = "Private ASN for the trusted Transit Gateway."
   type        = number
@@ -40,13 +47,14 @@ variable "remote_asn" {
   default     = 64514
 }
 
+################################################################################
+# VPC CIDR Block Variables
+################################################################################
 
-# --- VPC CIDR Block Variables ---
 variable "untrusted_il_summary_routes" {
   description = "A map of valid summary routes for the untrusted IL environment."
   type        = map(string)
   default = {
-    # This summary covers the 172.17.16.0 - 172.17.31.255 range
     main = "172.17.16.0/20"
   }
 }
@@ -82,7 +90,10 @@ variable "remote_vpc_cidrs" {
   }
 }
 
-# --- Client VPN Variables ---
+################################################################################
+# Client VPN Variables
+################################################################################
+
 variable "vpn_authentication_type" {
   description = "The authentication method for the VPN. Can be 'certificate' or 'saml'."
   type        = string
@@ -121,7 +132,10 @@ variable "untrusted_vpn_client_cidr" {
   default     = "172.31.0.0/22"
 }
 
-# --- EC2 Instance Variables ---
+################################################################################
+# EC2 Instance Variables
+################################################################################
+
 variable "trusted_ssh_key_name" {
   description = "The name of the EC2 Key Pair for instances in the TRUSTED environment."
   type        = string
@@ -147,5 +161,5 @@ variable "default_instance_type" {
 variable "srt_udp_ports" {
   description = "A list of UDP ports to open for SRT ingress."
   type        = list(number)
-  default     = [9999]
+  default     = [8090]
 }

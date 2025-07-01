@@ -1,14 +1,20 @@
 output "tgw_id" {
-  description = "The ID of the Transit Gateway."
+  description = "ID of the Transit Gateway"
   value       = aws_ec2_transit_gateway.this.id
 }
 
-output "tgw_arn" {
-  description = "The ARN of the Transit Gateway."
-  value       = aws_ec2_transit_gateway.this.arn
+output "tgw_default_route_table_id" {
+  description = "ID of the default Transit Gateway route table"
+  value       = data.aws_ec2_transit_gateway_route_table.default.id
 }
 
-output "association_default_route_table_id" {
-  description = "The ID of the default association route table."
-  value       = aws_ec2_transit_gateway.this.association_default_route_table_id
+# For backward compatibility
+output "default_route_table_id" {
+  description = "ID of the default Transit Gateway route table (alias)"
+  value       = data.aws_ec2_transit_gateway_route_table.default.id
+}
+
+output "main_route_table_id" {
+  description = "ID of the main Transit Gateway route table (alias)"
+  value       = data.aws_ec2_transit_gateway_route_table.default.id
 }

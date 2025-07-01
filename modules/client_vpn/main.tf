@@ -13,6 +13,7 @@ resource "aws_ec2_client_vpn_endpoint" "this" {
   client_cidr_block      = var.client_cidr_block
   security_group_ids     = var.security_group_ids
   vpc_id                 = var.vpc_id
+  dns_servers            = var.dns_servers
 
   dynamic "authentication_options" {
     for_each = var.authentication_type == "saml" ? ["saml"] : []
@@ -56,13 +57,16 @@ resource "aws_ec2_client_vpn_authorization_rule" "this" {
 }
 
 resource "aws_ec2_client_vpn_route" "this" {
-  for_each = {
-    for k, v in var.authorized_network_cidrs : k => v
-    if v != var.association_network_cidr
-  }
+  for_each               = var.authorized_network_cidrs
   client_vpn_endpoint_id = aws_ec2_client_vpn_endpoint.this.id
   destination_cidr_block = each.value
   target_vpc_subnet_id   = var.target_vpc_subnet_id
   description            = "Route to ${each.key}"
-  depends_on             = [aws_ec2_client_vpn_network_association.this]
+
+  timeouts {
+    create = "10m"
+    delete = "10m"
+  }
+
+  depends_on = [aws_ec2_client_vpn_network_association.this]
 }
