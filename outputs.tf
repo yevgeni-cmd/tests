@@ -39,7 +39,6 @@ output "trusted_streaming_instance_id" {
 output "untrusted_instance_ips" {
   description = "Private IP addresses for untrusted instances."
   value = {
-    # NOTE: This will fail until the 'private_ip' output is added to the ec2_instance module.
     ingress_host = module.untrusted_ingress_host.private_ip
     scrub_host   = module.untrusted_scrub_host.private_ip
     devops_agent = module.untrusted_devops_agent.private_ip
@@ -49,7 +48,6 @@ output "untrusted_instance_ips" {
 output "trusted_instance_ips" {
   description = "Private IP addresses for trusted instances."
   value = {
-    # NOTE: This will fail until the 'private_ip' output is added to the ec2_instance module.
     scrub_host     = module.trusted_scrub_host.private_ip
     streaming_host = module.trusted_streaming_host.private_ip
     devops_agent   = module.trusted_devops_agent.private_ip
@@ -122,21 +120,20 @@ output "trusted_tgw_id" {
   value       = module.trusted_tgw.tgw_id
 }
 
-# output "vpc_peering_connection_id" {
-#   description = "VPC Peering Connection ID between untrusted and trusted scrub."
-#   value       = aws_vpc_peering_connection.untrusted_to_trusted_scrub.id
-# }
+# FIXED: Uncommented VPC peering connection output
+output "vpc_peering_connection_id" {
+  description = "VPC Peering Connection ID between untrusted and trusted scrub."
+  value       = aws_vpc_peering_connection.untrusted_to_trusted_scrub.id
+}
 
 # --- VPN Information ---
 
 output "untrusted_vpn_endpoint_id" {
   description = "Client VPN Endpoint ID for the untrusted environment."
-  # FIX: Changed 'client_vpn_endpoint_id' to 'endpoint_id' to match the module output.
   value       = module.untrusted_vpn.endpoint_id
 }
 
 output "trusted_vpn_endpoint_id" {
   description = "Client VPN Endpoint ID for the trusted environment."
-  # FIX: Changed 'client_vpn_endpoint_id' to 'endpoint_id' to match the module output.
   value       = module.trusted_vpn.endpoint_id
 }

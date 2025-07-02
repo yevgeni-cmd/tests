@@ -14,6 +14,12 @@ resource "aws_vpc_peering_connection" "untrusted_to_trusted_scrub" {
   tags = {
     Name = "${var.project_name}-untrusted-to-trusted-scrub-peering"
   }
+
+  # FIXED: Added explicit dependencies
+  depends_on = [
+    module.untrusted_vpc_streaming_scrub,
+    module.trusted_vpc_streaming_scrub
+  ]
 }
 
 # Route from untrusted scrub to trusted scrub (for UDP streaming)
@@ -23,7 +29,10 @@ resource "aws_route" "untrusted_scrub_to_trusted_scrub" {
   destination_cidr_block    = var.trusted_vpc_cidrs["streaming_scrub"]
   vpc_peering_connection_id = aws_vpc_peering_connection.untrusted_to_trusted_scrub.id
 
-  depends_on = [aws_vpc_peering_connection.untrusted_to_trusted_scrub]
+  depends_on = [
+    aws_vpc_peering_connection.untrusted_to_trusted_scrub,
+    module.untrusted_vpc_streaming_scrub
+  ]
 }
 
 # Route from trusted scrub back to untrusted scrub (for return traffic)
@@ -33,7 +42,10 @@ resource "aws_route" "trusted_scrub_to_untrusted_scrub" {
   destination_cidr_block    = var.untrusted_vpc_cidrs["streaming_scrub"]
   vpc_peering_connection_id = aws_vpc_peering_connection.untrusted_to_trusted_scrub.id
 
-  depends_on = [aws_vpc_peering_connection.untrusted_to_trusted_scrub]
+  depends_on = [
+    aws_vpc_peering_connection.untrusted_to_trusted_scrub,
+    module.trusted_vpc_streaming_scrub
+  ]
 }
 
 # --- Custom Network ACLs ---
@@ -153,6 +165,8 @@ resource "aws_network_acl" "scrub_app_nacl" {
   tags = {
     Name = "${var.project_name}-scrub-app-nacl"
   }
+
+  depends_on = [module.untrusted_vpc_streaming_scrub]
 }
 
 # Custom NACL for Trusted Scrub App Subnet - MATCHING UNTRUSTED
@@ -270,6 +284,8 @@ resource "aws_network_acl" "trusted_scrub_app_nacl" {
   tags = {
     Name = "${var.project_name}-trusted-scrub-app-nacl"
   }
+
+  depends_on = [module.trusted_vpc_streaming_scrub]
 }
 
 # --- Route Table Customizations ---
@@ -279,75 +295,106 @@ resource "aws_network_acl" "trusted_scrub_app_nacl" {
 resource "aws_route" "devops_to_other_untrusted_vpcs" {
   provider               = aws.primary
   route_table_id         = module.untrusted_vpc_devops.private_route_table_id
-  destination_cidr_block = "172.17.0.0/16"
+  destination_cidr_block = "172.19.0.0/16"
   transit_gateway_id     = module.untrusted_tgw.tgw_id
   
   depends_on = [
-    module.untrusted_vpc_devops,
-    module.untrusted_vpc_streaming_ingress,
-    module.untrusted_vpc_streaming_scrub,
-    module.untrusted_vpc_iot
+    module.untrusted_tgw,
+    module.untrusted_vpc_devops.tgw_attachment_id,
+    module.untrusted_vpc_streaming_ingress.tgw_attachment_id,
+    module.untrusted_vpc_streaming_scrub.tgw_attachment_id,
+    module.untrusted_vpc_iot.tgw_attachment_id
   ]
+
+  # FIXED: Added timeout for route creation
+  timeouts {
+    create = "5m"
+    delete = "5m"
+  }
 }
 
 # Add TGW route to PUBLIC subnet for untrusted devops agent
 resource "aws_route" "untrusted_devops_public_to_vpcs" {
   provider               = aws.primary
   route_table_id         = module.untrusted_vpc_devops.public_route_table_id
-  destination_cidr_block = "172.17.0.0/16"
+  destination_cidr_block = "172.19.0.0/16"
   transit_gateway_id     = module.untrusted_tgw.tgw_id
   
   depends_on = [
-    module.untrusted_vpc_devops,
-    module.untrusted_vpc_streaming_ingress,
-    module.untrusted_vpc_streaming_scrub,
-    module.untrusted_vpc_iot
+    module.untrusted_tgw,
+    module.untrusted_vpc_devops.tgw_attachment_id,
+    module.untrusted_vpc_streaming_ingress.tgw_attachment_id,
+    module.untrusted_vpc_streaming_scrub.tgw_attachment_id,
+    module.untrusted_vpc_iot.tgw_attachment_id
   ]
+
+  timeouts {
+    create = "5m"
+    delete = "5m"
+  }
 }
 
 # Ingress VPC needs route back to DevOps VPC (for SSH return traffic)
 resource "aws_route" "ingress_to_untrusted_vpcs" {
   provider               = aws.primary
   route_table_id         = module.untrusted_vpc_streaming_ingress.public_route_table_id
-  destination_cidr_block = "172.17.0.0/16"
+  destination_cidr_block = "172.19.0.0/16"
   transit_gateway_id     = module.untrusted_tgw.tgw_id
   
   depends_on = [
-    module.untrusted_vpc_streaming_ingress,
-    module.untrusted_vpc_devops,
-    module.untrusted_vpc_streaming_scrub,
-    module.untrusted_vpc_iot
+    module.untrusted_tgw,
+    module.untrusted_vpc_streaming_ingress.tgw_attachment_id,
+    module.untrusted_vpc_devops.tgw_attachment_id,
+    module.untrusted_vpc_streaming_scrub.tgw_attachment_id,
+    module.untrusted_vpc_iot.tgw_attachment_id
   ]
+
+  timeouts {
+    create = "5m"
+    delete = "5m"
+  }
 }
 
 # Scrub VPC needs route back to DevOps VPC (for SSH return traffic)  
 resource "aws_route" "scrub_to_untrusted_vpcs" {
   provider               = aws.primary
   route_table_id         = module.untrusted_vpc_streaming_scrub.private_route_table_id
-  destination_cidr_block = "172.17.0.0/16"
+  destination_cidr_block = "172.19.0.0/16"
   transit_gateway_id     = module.untrusted_tgw.tgw_id
   
   depends_on = [
-    module.untrusted_vpc_streaming_scrub,
-    module.untrusted_vpc_devops,
-    module.untrusted_vpc_streaming_ingress,
-    module.untrusted_vpc_iot
+    module.untrusted_tgw,
+    module.untrusted_vpc_streaming_scrub.tgw_attachment_id,
+    module.untrusted_vpc_devops.tgw_attachment_id,
+    module.untrusted_vpc_streaming_ingress.tgw_attachment_id,
+    module.untrusted_vpc_iot.tgw_attachment_id
   ]
+
+  timeouts {
+    create = "5m"
+    delete = "5m"
+  }
 }
 
 # IoT VPC needs route back to DevOps VPC (for SSH return traffic)
 resource "aws_route" "iot_to_untrusted_vpcs" {
   provider               = aws.primary
   route_table_id         = module.untrusted_vpc_iot.private_route_table_id
-  destination_cidr_block = "172.17.0.0/16"
+  destination_cidr_block = "172.19.0.0/16"
   transit_gateway_id     = module.untrusted_tgw.tgw_id
   
   depends_on = [
-    module.untrusted_vpc_iot,
-    module.untrusted_vpc_devops,
-    module.untrusted_vpc_streaming_ingress,
-    module.untrusted_vpc_streaming_scrub
+    module.untrusted_tgw,
+    module.untrusted_vpc_iot.tgw_attachment_id,
+    module.untrusted_vpc_devops.tgw_attachment_id,
+    module.untrusted_vpc_streaming_ingress.tgw_attachment_id,
+    module.untrusted_vpc_streaming_scrub.tgw_attachment_id
   ]
+
+  timeouts {
+    create = "5m"
+    delete = "5m"
+  }
 }
 
 # Routes for trusted VPCs to communicate via TGW
@@ -358,12 +405,18 @@ resource "aws_route" "trusted_devops_to_other_vpcs" {
   transit_gateway_id     = module.trusted_tgw.tgw_id
   
   depends_on = [
-    module.trusted_vpc_devops,
-    module.trusted_vpc_streaming_scrub,
-    module.trusted_vpc_streaming,
-    module.trusted_vpc_iot,
-    module.trusted_vpc_jacob
+    module.trusted_tgw,
+    module.trusted_vpc_devops.tgw_attachment_id,
+    module.trusted_vpc_streaming_scrub.tgw_attachment_id,
+    module.trusted_vpc_streaming.tgw_attachment_id,
+    module.trusted_vpc_iot.tgw_attachment_id,
+    module.trusted_vpc_jacob.tgw_attachment_id
   ]
+
+  timeouts {
+    create = "5m"
+    delete = "5m"
+  }
 }
 
 # Add TGW route to PUBLIC subnet for trusted devops agent
@@ -374,12 +427,18 @@ resource "aws_route" "trusted_devops_public_to_vpcs" {
   transit_gateway_id     = module.trusted_tgw.tgw_id
   
   depends_on = [
-    module.trusted_vpc_devops,
-    module.trusted_vpc_streaming_scrub,
-    module.trusted_vpc_streaming,
-    module.trusted_vpc_iot,
-    module.trusted_vpc_jacob
+    module.trusted_tgw,
+    module.trusted_vpc_devops.tgw_attachment_id,
+    module.trusted_vpc_streaming_scrub.tgw_attachment_id,
+    module.trusted_vpc_streaming.tgw_attachment_id,
+    module.trusted_vpc_iot.tgw_attachment_id,
+    module.trusted_vpc_jacob.tgw_attachment_id
   ]
+
+  timeouts {
+    create = "5m"
+    delete = "5m"
+  }
 }
 
 resource "aws_route" "trusted_scrub_to_other_vpcs" {
@@ -389,12 +448,18 @@ resource "aws_route" "trusted_scrub_to_other_vpcs" {
   transit_gateway_id     = module.trusted_tgw.tgw_id
   
   depends_on = [
-    module.trusted_vpc_streaming_scrub,
-    module.trusted_vpc_devops,
-    module.trusted_vpc_streaming,
-    module.trusted_vpc_iot,
-    module.trusted_vpc_jacob
+    module.trusted_tgw,
+    module.trusted_vpc_streaming_scrub.tgw_attachment_id,
+    module.trusted_vpc_devops.tgw_attachment_id,
+    module.trusted_vpc_streaming.tgw_attachment_id,
+    module.trusted_vpc_iot.tgw_attachment_id,
+    module.trusted_vpc_jacob.tgw_attachment_id
   ]
+
+  timeouts {
+    create = "5m"
+    delete = "5m"
+  }
 }
 
 resource "aws_route" "trusted_streaming_to_other_vpcs" {
@@ -404,40 +469,16 @@ resource "aws_route" "trusted_streaming_to_other_vpcs" {
   transit_gateway_id     = module.trusted_tgw.tgw_id
   
   depends_on = [
-    module.trusted_vpc_streaming,
-    module.trusted_vpc_devops,
-    module.trusted_vpc_streaming_scrub,
-    module.trusted_vpc_iot,
-    module.trusted_vpc_jacob
+    module.trusted_tgw,
+    module.trusted_vpc_streaming.tgw_attachment_id,
+    module.trusted_vpc_devops.tgw_attachment_id,
+    module.trusted_vpc_streaming_scrub.tgw_attachment_id,
+    module.trusted_vpc_iot.tgw_attachment_id,
+    module.trusted_vpc_jacob.tgw_attachment_id
   ]
-}
 
-resource "aws_route" "trusted_iot_to_other_vpcs" {
-  provider               = aws.primary
-  route_table_id         = module.trusted_vpc_iot.private_route_table_id
-  destination_cidr_block = "172.16.0.0/16"
-  transit_gateway_id     = module.trusted_tgw.tgw_id
-  
-  depends_on = [
-    module.trusted_vpc_iot,
-    module.trusted_vpc_devops,
-    module.trusted_vpc_streaming_scrub,
-    module.trusted_vpc_streaming,
-    module.trusted_vpc_jacob
-  ]
-}
-
-resource "aws_route" "trusted_jacob_to_other_vpcs" {
-  provider               = aws.primary
-  route_table_id         = module.trusted_vpc_jacob.private_route_table_id
-  destination_cidr_block = "172.16.0.0/16"
-  transit_gateway_id     = module.trusted_tgw.tgw_id
-  
-  depends_on = [
-    module.trusted_vpc_jacob,
-    module.trusted_vpc_devops,
-    module.trusted_vpc_streaming_scrub,
-    module.trusted_vpc_streaming,
-    module.trusted_vpc_iot
-  ]
+  timeouts {
+    create = "5m"
+    delete = "5m"
+  }
 }

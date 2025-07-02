@@ -29,10 +29,7 @@ variable "authorized_network_cidrs" {
   default     = {}
 }
 
-variable "association_network_cidr" {
-  description = "The CIDR of the VPC being associated with the VPN. This is to avoid creating a duplicate route."
-  type        = string
-}
+# REMOVED: association_network_cidr variable as it's not used in main.tf
 
 variable "authentication_type" {
   description = "The authentication method. Can be 'certificate' or 'saml'."

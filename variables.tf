@@ -26,6 +26,29 @@ variable "remote_region" {
 }
 
 ################################################################################
+# Custom AMI Configuration
+################################################################################
+
+# ADDED: Custom AMI variables
+variable "custom_standard_ami_id" {
+  description = "Custom AMI ID with Docker for standard instances (untrusted hosts, trusted non-GPU hosts)."
+  type        = string
+  default     = "ami-0ea2fce7f7afb4f4c"
+}
+
+variable "custom_gpu_ami_id" {
+  description = "Custom AMI ID with Docker and GPU support for GPU instances (trusted streaming host - future use)."
+  type        = string
+  default     = null # Will be added when GPU AMI is ready
+}
+
+variable "use_custom_amis" {
+  description = "Whether to use custom AMIs instead of default Ubuntu/Amazon Linux AMIs."
+  type        = bool
+  default     = true
+}
+
+################################################################################
 # Transit Gateway Variables
 ################################################################################
 
@@ -149,7 +172,7 @@ variable "untrusted_ssh_key_name" {
 variable "instance_os" {
   description = "The operating system for the EC2 instances. Valid options: 'amazon', 'ubuntu'."
   type        = string
-  default     = "amazon"
+  default     = "ubuntu"
 }
 
 variable "default_instance_type" {
@@ -161,5 +184,5 @@ variable "default_instance_type" {
 variable "srt_udp_ports" {
   description = "A list of UDP ports to open for SRT ingress."
   type        = list(number)
-  default     = [8090]
+  default     = [8890]
 }

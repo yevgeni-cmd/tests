@@ -104,6 +104,24 @@ module "trusted_scrub_host" {
   instance_type = var.default_instance_type
   subnet_id     = module.trusted_vpc_streaming_scrub.private_subnets_by_name["app"].id
   vpc_id        = module.trusted_vpc_streaming_scrub.vpc_id
+  enable_ecr_access = true
+  
+  # Use custom AMI with Docker pre-installed
+  custom_ami_id = var.use_custom_amis ? var.custom_standard_ami_id : null
+  
+  # FIXED: Add SSH fix user-data to ensure SSH works properly with custom AMI
+  user_data = templatefile("${path.module}/templates/ssh-fix-userdata.sh", {})
+  
+  # Configure SSH access via module parameters
+  allowed_ssh_cidrs = [
+    var.trusted_vpn_client_cidr,
+    var.trusted_vpc_cidrs["devops"]
+  ]
+  
+  # Allow UDP ports for streaming from untrusted scrub via peering
+  allowed_ingress_cidrs = [
+    var.untrusted_vpc_cidrs["streaming_scrub"]  # For UDP streaming via VPC peering
+  ]
 }
 
 # Trusted DevOps Agent (in public subnet with internet access)
@@ -117,9 +135,23 @@ module "trusted_devops_agent" {
   subnet_id           = module.trusted_vpc_devops.public_subnets_by_name["agent"].id
   vpc_id              = module.trusted_vpc_devops.vpc_id
   associate_public_ip = true
+  enable_ecr_access   = true
+  
+  # Use custom AMI with Docker pre-installed
+  custom_ami_id = var.use_custom_amis ? var.custom_standard_ami_id : null
+  
+  # FIXED: Add SSH fix user-data to ensure SSH works properly with custom AMI
+  user_data = templatefile("${path.module}/templates/ssh-fix-userdata.sh", {})
+  
+  # Configure SSH access via module parameters
+  allowed_ssh_cidrs = [
+    var.trusted_vpn_client_cidr,
+    var.trusted_vpc_cidrs["devops"]
+  ]
 }
 
 # Trusted Streaming Docker Host (in VPC Streaming VOD)
+# FUTURE: This will use GPU AMI when available
 module "trusted_streaming_host" {
   source        = "./modules/ec2_instance"
   providers     = { aws = aws.primary }
@@ -127,7 +159,21 @@ module "trusted_streaming_host" {
   key_name      = var.trusted_ssh_key_name
   instance_os   = var.instance_os
   instance_type = var.default_instance_type
-  # KEEP streaming-docker subnet as per architecture
   subnet_id     = module.trusted_vpc_streaming.private_subnets_by_name["streaming-docker"].id
   vpc_id        = module.trusted_vpc_streaming.vpc_id
+  enable_ecr_access = true
+  
+  # Use GPU AMI if available, otherwise standard AMI
+  custom_ami_id = var.use_custom_amis ? (
+    var.custom_gpu_ami_id != null ? var.custom_gpu_ami_id : var.custom_standard_ami_id
+  ) : null
+  
+  # FIXED: Add SSH fix user-data to ensure SSH works properly with custom AMI
+  user_data = templatefile("${path.module}/templates/ssh-fix-userdata.sh", {})
+  
+  # Configure SSH access via module parameters
+  allowed_ssh_cidrs = [
+    var.trusted_vpn_client_cidr,
+    var.trusted_vpc_cidrs["devops"]
+  ]
 }

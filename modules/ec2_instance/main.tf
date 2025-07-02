@@ -8,6 +8,8 @@ terraform {
 }
 
 data "aws_ami" "selected" {
+  # UPDATED: Use custom AMI if provided, otherwise use default AMI filters
+  count       = var.custom_ami_id != null ? 0 : 1
   most_recent = true
   owners      = [var.ami_owners[var.instance_os]]
 
@@ -19,6 +21,11 @@ data "aws_ami" "selected" {
     name   = "virtualization-type"
     values = ["hvm"]
   }
+}
+
+# Use custom AMI if provided, otherwise use the discovered AMI
+locals {
+  ami_id = var.custom_ami_id != null ? var.custom_ami_id : data.aws_ami.selected[0].id
 }
 
 resource "aws_iam_role" "ec2_role" {
@@ -33,6 +40,27 @@ resource "aws_iam_role_policy_attachment" "ecr_policy" {
   count      = var.enable_ecr_access ? 1 : 0
   role       = aws_iam_role.ec2_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+}
+
+# ADDED: Policy for EC2 describe permissions (needed for untrusted scrub user-data)
+resource "aws_iam_role_policy" "ec2_describe_policy" {
+  count = var.enable_ec2_describe ? 1 : 0
+  name  = "${var.instance_name}-ec2-describe-policy"
+  role  = aws_iam_role.ec2_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ec2:DescribeInstances",
+          "ec2:DescribeTags"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
 }
 
 resource "aws_iam_instance_profile" "ec2_profile" {
@@ -85,12 +113,16 @@ resource "aws_security_group" "this" {
 }
 
 resource "aws_instance" "this" {
-  ami                         = data.aws_ami.selected.id
+  ami                         = local.ami_id
   instance_type               = var.instance_type
   key_name                    = var.key_name
   subnet_id                   = var.subnet_id
   vpc_security_group_ids      = [aws_security_group.this.id]
   iam_instance_profile        = aws_iam_instance_profile.ec2_profile.name
   associate_public_ip_address = var.associate_public_ip
-  tags                        = { Name = var.instance_name }
+  
+  # ADDED: User data support
+  user_data = var.user_data
+  
+  tags = { Name = var.instance_name }
 }

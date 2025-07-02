@@ -12,7 +12,6 @@ module "untrusted_tgw" {
 
 # --- Untrusted VPCs ---
 
-# Streaming Ingress VPC
 module "untrusted_vpc_streaming_ingress" {
   source     = "./modules/vpc"
   providers  = { aws = aws.primary }
@@ -22,15 +21,12 @@ module "untrusted_vpc_streaming_ingress" {
   aws_region = var.primary_region
   tgw_id     = module.untrusted_tgw.tgw_id
 
-  # Enable IGW for public subnet
   create_igw = true
-
   public_subnet_names  = ["ec2"]
   private_subnet_names = ["tgw-attach", "endpoints"]
   vpc_endpoints        = ["ecr.api", "ecr.dkr", "s3"]
 }
 
-# Streaming Scrub VPC
 module "untrusted_vpc_streaming_scrub" {
   source     = "./modules/vpc"
   providers  = { aws = aws.primary }
@@ -44,7 +40,6 @@ module "untrusted_vpc_streaming_scrub" {
   vpc_endpoints        = ["ecr.api", "ecr.dkr"]
 }
 
-# IoT Management VPC
 module "untrusted_vpc_iot" {
   source     = "./modules/vpc"
   providers  = { aws = aws.primary }
@@ -54,16 +49,13 @@ module "untrusted_vpc_iot" {
   aws_region = var.primary_region
   tgw_id     = module.untrusted_tgw.tgw_id
 
-  # Enable NAT Gateway for Lambda internet access
   create_nat_gateway = true
   create_igw         = true
-
   public_subnet_names  = ["nat"]
   private_subnet_names = ["lambda", "tgw-attach", "endpoints"]
   vpc_endpoints        = ["ecr.api", "ecr.dkr", "sqs"]
 }
 
-# DevOps VPC
 module "untrusted_vpc_devops" {
   source     = "./modules/vpc"
   providers  = { aws = aws.primary }
@@ -73,9 +65,7 @@ module "untrusted_vpc_devops" {
   aws_region = var.primary_region
   tgw_id     = module.untrusted_tgw.tgw_id
 
-  # Enable IGW for agent subnet internet access
   create_igw = true
-
   public_subnet_names  = ["agent"]
   private_subnet_names = ["vpn", "tgw-attach", "endpoints"]
   vpc_endpoints        = ["ecr.api", "ecr.dkr"]
@@ -94,18 +84,46 @@ module "untrusted_ingress_host" {
   subnet_id           = module.untrusted_vpc_streaming_ingress.public_subnets_by_name["ec2"].id
   vpc_id              = module.untrusted_vpc_streaming_ingress.vpc_id
   associate_public_ip = true
+  enable_ecr_access   = true
+  
+  custom_ami_id = var.use_custom_amis ? var.custom_standard_ami_id : null
+  
+  allowed_ssh_cidrs = [
+    var.untrusted_vpn_client_cidr,
+    var.untrusted_vpc_cidrs["devops"]
+  ]
+  allowed_udp_ports = var.srt_udp_ports
 }
 
-# Streaming Scrub Host  
+# Streaming Scrub Host
 module "untrusted_scrub_host" {
-  source        = "./modules/ec2_instance"
-  providers     = { aws = aws.primary }
-  instance_name = "${var.project_name}-untrusted-scrub-host"
-  key_name      = var.untrusted_ssh_key_name
-  instance_os   = var.instance_os
-  instance_type = var.default_instance_type
-  subnet_id     = module.untrusted_vpc_streaming_scrub.private_subnets_by_name["app"].id
-  vpc_id        = module.untrusted_vpc_streaming_scrub.vpc_id
+  source            = "./modules/ec2_instance"
+  providers         = { aws = aws.primary }
+  instance_name     = "${var.project_name}-untrusted-scrub-host"
+  key_name          = var.untrusted_ssh_key_name
+  instance_os       = var.instance_os
+  instance_type     = var.default_instance_type
+  subnet_id         = module.untrusted_vpc_streaming_scrub.private_subnets_by_name["app"].id
+  vpc_id            = module.untrusted_vpc_streaming_scrub.vpc_id
+  enable_ecr_access = true
+  enable_ec2_describe = true
+  
+  custom_ami_id = var.use_custom_amis ? var.custom_standard_ami_id : null
+  
+  # User-data with Docker network fix for custom AMI
+  user_data = templatefile("${path.module}/templates/combined-scrub-userdata.sh", {
+    trusted_scrub_vpc_cidr = var.trusted_vpc_cidrs["streaming_scrub"]
+    udp_port              = var.srt_udp_ports[0]
+    aws_region            = var.primary_region
+  })
+  
+  allowed_ssh_cidrs = [
+    var.untrusted_vpn_client_cidr,
+    var.untrusted_vpc_cidrs["devops"]
+  ]
+  allowed_ingress_cidrs = [
+    var.untrusted_vpc_cidrs["streaming_ingress"]
+  ]
 }
 
 # DevOps Agent
@@ -119,4 +137,12 @@ module "untrusted_devops_agent" {
   subnet_id           = module.untrusted_vpc_devops.public_subnets_by_name["agent"].id
   vpc_id              = module.untrusted_vpc_devops.vpc_id
   associate_public_ip = true
+  enable_ecr_access   = true
+  
+  custom_ami_id = var.use_custom_amis ? var.custom_standard_ami_id : null
+  
+  allowed_ssh_cidrs = [
+    var.untrusted_vpn_client_cidr,
+    var.untrusted_vpc_cidrs["devops"]
+  ]
 }

@@ -41,6 +41,13 @@ variable "enable_ecr_access" {
   default     = false
 }
 
+# ADDED: Support for EC2 describe permissions (needed for dynamic IP discovery)
+variable "enable_ec2_describe" {
+  description = "If true, attaches a policy allowing EC2 describe permissions for dynamic IP discovery."
+  type        = bool
+  default     = false
+}
+
 variable "allowed_udp_ports" {
   description = "A list of UDP ports to allow ingress traffic from the internet."
   type        = list(number)
@@ -59,12 +66,26 @@ variable "allowed_ingress_cidrs" {
   default     = []
 }
 
+# ADDED: Custom AMI support
+variable "custom_ami_id" {
+  description = "Custom AMI ID to use instead of the default AMI filters. If null, uses ami_filters."
+  type        = string
+  default     = null
+}
+
+# ADDED: User data support
+variable "user_data" {
+  description = "User data script to run on instance launch."
+  type        = string
+  default     = null
+}
+
 variable "ami_filters" {
   description = "A map of AMI filters for different operating systems."
   type        = map(string)
   default = {
     amazon = "amzn2-ami-hvm-*-x86_64-gp2"
-    ubuntu = "ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-*"
+    ubuntu = "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"
   }
 }
 
