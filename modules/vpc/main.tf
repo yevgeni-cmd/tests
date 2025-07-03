@@ -224,7 +224,7 @@ resource "aws_vpc_endpoint" "interface" {
   vpc_endpoint_type   = "Interface"
   subnet_ids          = [for s in aws_subnet.private : s.id if endswith(s.tags.Name, "-endpoints")]
   security_group_ids  = length(aws_security_group.vpc_endpoints) > 0 ? [aws_security_group.vpc_endpoints[0].id] : []
-  private_dns_enabled = false  # Disabled to avoid DNS conflicts
+  private_dns_enabled = true
 
   tags = {
     Name = "${var.name}-${each.value}-interface-endpoint"

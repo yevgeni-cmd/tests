@@ -24,12 +24,17 @@ variable "vpc_id" {
 }
 
 variable "authorized_network_cidrs" {
-  description = "A map of network CIDRs to authorize access to for split-tunneling. Key is a description."
+  description = "A map of network CIDRs to authorize access to. Key is a description."
   type        = map(string)
   default     = {}
 }
 
-# REMOVED: association_network_cidr variable as it's not used in main.tf
+# ADDED: Separate variable for route creation to avoid duplicate routes
+variable "route_network_cidrs" {
+  description = "A map of network CIDRs to create routes for. Should exclude the associated VPC CIDR to avoid duplicates with AWS auto-created routes. Key is a description."
+  type        = map(string)
+  default     = {}
+}
 
 variable "authentication_type" {
   description = "The authentication method. Can be 'certificate' or 'saml'."

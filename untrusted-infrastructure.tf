@@ -80,13 +80,19 @@ module "untrusted_ingress_host" {
   instance_name       = "${var.project_name}-untrusted-ingress-host"
   key_name            = var.untrusted_ssh_key_name
   instance_os         = var.instance_os
-  instance_type       = var.default_instance_type
+  instance_type       = var.instance_types.untrusted_ingress
   subnet_id           = module.untrusted_vpc_streaming_ingress.public_subnets_by_name["ec2"].id
   vpc_id              = module.untrusted_vpc_streaming_ingress.vpc_id
   associate_public_ip = true
   enable_ecr_access   = true
   
   custom_ami_id = var.use_custom_amis ? var.custom_standard_ami_id : null
+  
+  # ADD ONLY: ECR auto-login user data
+  user_data = templatefile("${path.module}/templates/ecr-auto-login-userdata.sh", {
+    aws_region       = var.primary_region
+    ecr_registry_url = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.primary_region}.amazonaws.com"
+  })
   
   allowed_ssh_cidrs = [
     var.untrusted_vpn_client_cidr,
@@ -102,7 +108,7 @@ module "untrusted_scrub_host" {
   instance_name     = "${var.project_name}-untrusted-scrub-host"
   key_name          = var.untrusted_ssh_key_name
   instance_os       = var.instance_os
-  instance_type     = var.default_instance_type
+  instance_type     = var.instance_types.untrusted_scrub
   subnet_id         = module.untrusted_vpc_streaming_scrub.private_subnets_by_name["app"].id
   vpc_id            = module.untrusted_vpc_streaming_scrub.vpc_id
   enable_ecr_access = true
@@ -113,7 +119,6 @@ module "untrusted_scrub_host" {
   # User-data with Docker network fix for custom AMI
   user_data = templatefile("${path.module}/templates/combined-scrub-userdata.sh", {
     trusted_scrub_vpc_cidr = var.trusted_vpc_cidrs["streaming_scrub"]
-    udp_port              = var.srt_udp_ports[0]
     aws_region            = var.primary_region
   })
   
@@ -126,23 +131,59 @@ module "untrusted_scrub_host" {
   ]
 }
 
-# DevOps Agent
-module "untrusted_devops_agent" {
-  source              = "./modules/ec2_instance"
-  providers           = { aws = aws.primary }
-  instance_name       = "${var.project_name}-untrusted-devops-agent"
-  key_name            = var.untrusted_ssh_key_name
-  instance_os         = var.instance_os
-  instance_type       = var.default_instance_type
-  subnet_id           = module.untrusted_vpc_devops.public_subnets_by_name["agent"].id
-  vpc_id              = module.untrusted_vpc_devops.vpc_id
-  associate_public_ip = true
-  enable_ecr_access   = true
+# Untrusted DevOps Host
+module "untrusted_devops_host" {
+  source        = "./modules/ec2_instance"
+  providers     = { aws = aws.primary }
+  instance_name = "${var.project_name}-untrusted-devops-host"
+  key_name      = var.untrusted_ssh_key_name
+  instance_os   = var.instance_os
+  instance_type = var.instance_types.untrusted_devops
+  subnet_id     = module.untrusted_vpc_devops.private_subnets_by_name["app"].id
+  vpc_id        = module.untrusted_vpc_devops.vpc_id
+  enable_ecr_access = true
   
   custom_ami_id = var.use_custom_amis ? var.custom_standard_ami_id : null
+  
+  # ADO Agent + ECR user data
+  user_data = templatefile("${path.module}/templates/ado-agent-userdata.sh", {
+    aws_region                    = var.primary_region
+    ecr_registry_url             = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.primary_region}.amazonaws.com"
+    ado_organization_url         = var.ado_organization_url
+    ado_agent_pool_name          = var.ado_agent_pool_name
+    ado_pat_secret_name          = var.enable_ado_agents ? aws_secretsmanager_secret.ado_pat[0].name : ""
+    deployment_ssh_key_secret_name = var.enable_auto_deployment ? aws_secretsmanager_secret.deployment_ssh_key[0].name : ""
+    enable_auto_deployment       = var.enable_auto_deployment
+    environment_type             = "untrusted"
+  })
   
   allowed_ssh_cidrs = [
     var.untrusted_vpn_client_cidr,
     var.untrusted_vpc_cidrs["devops"]
   ]
+}
+
+# Add inline policy for ADO secrets access to untrusted DevOps host
+resource "aws_iam_role_policy" "untrusted_devops_ado_secrets" {
+  count = var.enable_ado_agents ? 1 : 0
+  name  = "ado-secrets-access"
+  role  = "${var.project_name}-untrusted-devops-host-role"  # Standard role name pattern from EC2 module
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue"
+        ]
+        Resource = compact([
+          var.enable_ado_agents ? aws_secretsmanager_secret.ado_pat[0].arn : "",
+          var.enable_auto_deployment ? aws_secretsmanager_secret.deployment_ssh_key[0].arn : ""
+        ])
+      }
+    ]
+  })
+
+  depends_on = [module.untrusted_devops_host]
 }

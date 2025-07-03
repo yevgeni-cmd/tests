@@ -2,6 +2,21 @@
 # VPN Configuration - Separate Untrusted and Trusted VPNs
 ################################################################################
 
+# FIXED: Pre-filter authorized networks to exclude the VPC where VPN is associated
+locals {
+  # For untrusted VPN (associated with devops VPC), exclude devops CIDR from routes
+  untrusted_vpn_route_networks = {
+    for k, v in var.untrusted_vpc_cidrs : k => v
+    if k != "devops"  # Exclude devops VPC since VPN is associated with it
+  }
+  
+  # For trusted VPN (associated with devops VPC), exclude devops CIDR from routes  
+  trusted_vpn_route_networks = {
+    for k, v in var.trusted_vpc_cidrs : k => v
+    if k != "devops"  # Exclude devops VPC since VPN is associated with it
+  }
+}
+
 # Untrusted VPN Configuration - UNTRUSTED ONLY (NO trusted zone access)
 module "untrusted_vpn" {
   source                 = "./modules/client_vpn"
@@ -13,13 +28,14 @@ module "untrusted_vpn" {
   saml_provider_arn      = var.saml_identity_provider_arn
   target_vpc_subnet_id   = module.untrusted_vpc_devops.private_subnets_by_name["vpn"].id
   vpc_id                 = module.untrusted_vpc_devops.vpc_id
-  authorized_network_cidrs = { 
-    # Include ALL untrusted VPCs (including devops)
-    for k, v in var.untrusted_vpc_cidrs : k => v 
-  }
-  security_group_ids     = [aws_security_group.untrusted_vpn_sg.id]
   
-  # REMOVED: DNS servers not needed for split tunnel
+  # Authorization rules for ALL VPCs (including devops for connectivity)
+  authorized_network_cidrs = var.untrusted_vpc_cidrs
+  
+  # Routes only for NON-associated VPCs (exclude devops to avoid duplicate)
+  route_network_cidrs = local.untrusted_vpn_route_networks
+  
+  security_group_ids     = [aws_security_group.untrusted_vpn_sg.id]
 }
 
 # Untrusted VPN User Policy
@@ -41,12 +57,14 @@ module "trusted_vpn" {
   saml_provider_arn      = var.saml_identity_provider_arn
   target_vpc_subnet_id   = module.trusted_vpc_devops.private_subnets_by_name["vpn"].id
   vpc_id                 = module.trusted_vpc_devops.vpc_id
-  authorized_network_cidrs = { 
-    # Include ALL trusted VPCs (including devops)
-    for k, v in var.trusted_vpc_cidrs : k => v 
-  }
-  security_group_ids     = [aws_security_group.trusted_vpn_sg.id]
   
+  # Authorization rules for ALL VPCs (including devops for connectivity)
+  authorized_network_cidrs = var.trusted_vpc_cidrs
+  
+  # Routes only for NON-associated VPCs (exclude devops to avoid duplicate)
+  route_network_cidrs = local.trusted_vpn_route_networks
+  
+  security_group_ids     = [aws_security_group.trusted_vpn_sg.id]
 }
 
 # Trusted VPN User Policy

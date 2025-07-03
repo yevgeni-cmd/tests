@@ -78,7 +78,7 @@ variable "untrusted_il_summary_routes" {
   description = "A map of valid summary routes for the untrusted IL environment."
   type        = map(string)
   default = {
-    main = "172.17.16.0/20"
+    main = "172.19.16.0/20"
   }
 }
 
@@ -98,10 +98,10 @@ variable "untrusted_vpc_cidrs" {
   description = "A map of CIDR blocks for all VPCs in the untrusted environment."
   type        = map(string)
   default = {
-    "streaming_ingress" = "172.17.21.0/24"
-    "streaming_scrub"   = "172.17.22.0/24"
-    "iot_management"    = "172.17.23.0/24"
-    "devops"            = "172.17.24.0/24"
+    "streaming_ingress" = "172.19.21.0/24"
+    "streaming_scrub"   = "172.19.22.0/24"
+    "iot_management"    = "172.19.23.0/24"
+    "devops"            = "172.19.24.0/24"
   }
 }
 
@@ -175,14 +175,113 @@ variable "instance_os" {
   default     = "ubuntu"
 }
 
-variable "default_instance_type" {
-  description = "The default EC2 instance type to use for all servers."
-  type        = string
-  default     = "t3.micro"
-}
-
 variable "srt_udp_ports" {
   description = "A list of UDP ports to open for SRT ingress."
   type        = list(number)
   default     = [8890]
+}
+
+variable "peering_udp_port_range" {
+  description = "UDP port range for traffic forwarding between untrusted and trusted scrub hosts"
+  type = object({
+    from = number
+    to   = number
+  })
+  default = {
+    from = 50000
+    to   = 51000
+  }
+}
+
+# Instance type configurations by role
+variable "instance_types" {
+  description = "Instance types for different server roles"
+  type = object({
+    # Untrusted environment
+    untrusted_ingress    = string  # Needs more CPU/bandwidth for streaming ingress
+    untrusted_scrub      = string  # Light forwarding only
+    untrusted_devops     = string  # Development/management tasks
+    
+    # Trusted environment  
+    trusted_scrub        = string  # Processing + containers
+    trusted_streaming    = string  # Video streaming (GPU optional)
+    trusted_devops       = string  # Development/management tasks
+  })
+  
+  default = {
+    # Untrusted environment
+    untrusted_ingress    = "c5.large"    # 2 vCPU, 4GB RAM - good for network I/O
+    untrusted_scrub      = "t3.micro"    # 2 vCPU, 1GB RAM - minimal for forwarding
+    untrusted_devops     = "t3.medium"   # 2 vCPU, 4GB RAM - development work
+    
+    # Trusted environment
+    trusted_scrub        = "c5.large"    # 2 vCPU, 4GB RAM - container processing
+    trusted_streaming    = "c5.large"    # 2 vCPU, 4GB RAM - default (GPU optional)
+    trusted_devops       = "t3.medium"   # 2 vCPU, 4GB RAM - development work
+  }
+}
+
+# GPU-specific configuration
+variable "use_gpu_for_streaming" {
+  description = "Whether to use GPU instance for trusted streaming host"
+  type        = bool
+  default     = false
+}
+
+variable "gpu_instance_type" {
+  description = "GPU instance type for streaming when use_gpu_for_streaming is true"
+  type        = string
+  default     = "g5.xlarge"
+}
+
+# Keep this for backward compatibility (deprecated)
+variable "default_instance_type" {
+  description = "Default EC2 instance type (deprecated - use instance_types instead)"
+  type        = string
+  default     = "t3.small"
+}
+
+# Add GPU-specific AMI variable
+variable "custom_gpu_ami_id" {
+  description = "Custom AMI ID for GPU instances (with NVIDIA drivers)"
+  type        = string
+  default     = null
+}
+
+# Azure DevOps Agent Configuration
+variable "enable_ado_agents" {
+  description = "Whether to install Azure DevOps agents on DevOps hosts"
+  type        = bool
+  default     = false
+}
+
+variable "ado_organization_url" {
+  description = "Azure DevOps organization URL (e.g., https://dev.azure.com/yourorg)"
+  type        = string
+  default     = ""
+}
+
+variable "ado_agent_pool_name" {
+  description = "Azure DevOps agent pool name"
+  type        = string
+  default     = "Default"
+}
+
+variable "ado_pat_secret_name" {
+  description = "AWS Secrets Manager secret name containing ADO Personal Access Token"
+  type        = string
+  default     = ""
+}
+
+# Deployment configuration
+variable "enable_auto_deployment" {
+  description = "Whether to enable auto-deployment capabilities from ADO agents"
+  type        = bool
+  default     = false
+}
+
+variable "deployment_ssh_key_secret_name" {
+  description = "AWS Secrets Manager secret name containing SSH private key for deployments"
+  type        = string
+  default     = ""
 }
