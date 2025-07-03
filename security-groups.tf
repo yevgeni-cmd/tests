@@ -349,3 +349,26 @@ resource "aws_security_group" "trusted_agent_sg" {
     Name = "${var.project_name}-trusted-agent-sg"
   }
 }
+
+resource "aws_security_group_rule" "trusted_scrub_port_50555_ingress" {
+  provider          = aws.primary
+  type              = "ingress"
+  from_port         = 50555
+  to_port           = 50555
+  protocol          = "udp"
+  cidr_blocks       = [var.trusted_vpc_cidrs["streaming"]]  # Allow from streaming VPC
+  security_group_id = aws_security_group.trusted_scrub_sg.id
+  description       = "UDP port 50555 from trusted streaming VPC"
+}
+
+# Security Group for Trusted Streaming Host - ADD this egress rule
+resource "aws_security_group_rule" "trusted_streaming_port_50555_egress" {
+  provider          = aws.primary
+  type              = "egress"
+  from_port         = 50555
+  to_port           = 50555
+  protocol          = "udp"
+  cidr_blocks       = [var.trusted_vpc_cidrs["streaming_scrub"]]  # Allow to scrub VPC
+  security_group_id = aws_security_group.trusted_streaming_sg.id
+  description       = "UDP port 50555 to trusted scrub VPC"
+}

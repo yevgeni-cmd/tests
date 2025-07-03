@@ -88,7 +88,6 @@ module "untrusted_ingress_host" {
   
   custom_ami_id = var.use_custom_amis ? var.custom_standard_ami_id : null
   
-  # ADD ONLY: ECR auto-login user data
   user_data = templatefile("${path.module}/templates/ecr-auto-login-userdata.sh", {
     aws_region       = var.primary_region
     ecr_registry_url = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.primary_region}.amazonaws.com"
@@ -139,14 +138,12 @@ module "untrusted_devops_host" {
   key_name      = var.untrusted_ssh_key_name
   instance_os   = var.instance_os
   instance_type = var.instance_types.untrusted_devops
-  subnet_id     = module.untrusted_vpc_devops.private_subnets_by_name["app"].id
+  subnet_id = module.untrusted_vpc_devops.public_subnets_by_name["agent"].id
   vpc_id        = module.untrusted_vpc_devops.vpc_id
   enable_ecr_access = true
-  
+  associate_public_ip = true
   custom_ami_id = var.use_custom_amis ? var.custom_standard_ami_id : null
-  
-  # ADO Agent + ECR user data
-  user_data = templatefile("${path.module}/templates/ado-agent-userdata.sh", {
+  user_data = templatefile("${path.module}/templates/ecr-auto-login-userdata.sh", {
     aws_region                    = var.primary_region
     ecr_registry_url             = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.primary_region}.amazonaws.com"
     ado_organization_url         = var.ado_organization_url
@@ -186,4 +183,29 @@ resource "aws_iam_role_policy" "untrusted_devops_ado_secrets" {
   })
 
   depends_on = [module.untrusted_devops_host]
+}
+
+
+resource "aws_eip" "untrusted_ingress_eip" {
+  provider = aws.primary
+  domain   = "vpc"
+  
+  tags = {
+    Name = "${var.project_name}-untrusted-ingress-eip"
+    Purpose = "static-ip-for-streaming-ingress"
+  }
+  
+  depends_on = [module.untrusted_vpc_streaming_ingress]
+}
+
+# Associate Elastic IP with Untrusted Ingress Host
+resource "aws_eip_association" "untrusted_ingress_eip_assoc" {
+  provider    = aws.primary
+  instance_id = module.untrusted_ingress_host.instance_id
+  allocation_id = aws_eip.untrusted_ingress_eip.id
+  
+  depends_on = [
+    aws_eip.untrusted_ingress_eip,
+    module.untrusted_ingress_host
+  ]
 }

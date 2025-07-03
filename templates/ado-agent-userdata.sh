@@ -7,7 +7,7 @@
 
 exec > >(tee /var/log/ado-agent-setup.log | logger -t ado-agent -s 2>/dev/console) 2>&1
 
-echo "--- Starting ADO Agent setup at $(date) ---"
+echo "--- Starting ADO Agent setup at $$(date) ---"
 
 # Configuration from Terraform
 ADO_ORGANIZATION_URL="${ado_organization_url}"
@@ -20,11 +20,11 @@ ENABLE_AUTO_DEPLOYMENT="${enable_auto_deployment}"
 ENVIRONMENT_TYPE="${environment_type}"  # trusted or untrusted
 
 log() {
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')] ADO Setup: $1"
+    echo "[$$(date +'%Y-%m-%d %H:%M:%S')] ADO Setup: $$1"
 }
 
 error() {
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $1" >&2
+    echo "[$$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $$1" >&2
 }
 
 # --- PART 1: ECR Auto-Login Setup ---
@@ -36,7 +36,7 @@ for i in {1..60}; do
         log "Docker service is ready"
         break
     fi
-    log "Waiting for Docker (attempt $i/60)..."
+    log "Waiting for Docker (attempt $$i/60)..."
     sleep 5
 done
 
@@ -46,14 +46,14 @@ for i in {1..30}; do
         log "AWS credentials available"
         break
     fi
-    log "Waiting for AWS credentials (attempt $i/30)..."
+    log "Waiting for AWS credentials (attempt $$i/30)..."
     sleep 10
 done
 
 # Perform initial ECR login
 if docker info >/dev/null 2>&1; then
     log "Performing initial ECR login..."
-    if aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY; then
+    if aws ecr get-login-password --region $$AWS_REGION | docker login --username AWS --password-stdin $$ECR_REGISTRY; then
         log "ECR login successful"
     else
         error "ECR login failed"
@@ -62,13 +62,13 @@ if docker info >/dev/null 2>&1; then
     # Create ECR login script
     cat > /usr/local/bin/ecr-login.sh << EOF
 #!/bin/bash
-AWS_REGION="$AWS_REGION"
-ECR_REGISTRY="$ECR_REGISTRY"
+AWS_REGION="$$AWS_REGION"
+ECR_REGISTRY="$$ECR_REGISTRY"
 
-if aws ecr get-login-password --region \$AWS_REGION | docker login --username AWS --password-stdin \$ECR_REGISTRY; then
-    echo "\$(date): ECR login successful"
+if aws ecr get-login-password --region \$$AWS_REGION | docker login --username AWS --password-stdin \$$ECR_REGISTRY; then
+    echo "\$$(date): ECR login successful"
 else
-    echo "\$(date): ECR login failed"
+    echo "\$$(date): ECR login failed"
     exit 1
 fi
 EOF
@@ -76,7 +76,7 @@ EOF
 fi
 
 # --- PART 2: ADO Agent Installation ---
-if [ "$ADO_ORGANIZATION_URL" != "" ] && [ "$ADO_PAT_SECRET" != "" ]; then
+if [ "$$ADO_ORGANIZATION_URL" != "" ] && [ "$$ADO_PAT_SECRET" != "" ]; then
     log "Installing Azure DevOps agent..."
     
     # Create agent user
@@ -93,29 +93,29 @@ if [ "$ADO_ORGANIZATION_URL" != "" ] && [ "$ADO_PAT_SECRET" != "" ]; then
     
     # Download and extract agent
     log "Downloading ADO agent..."
-    AGENT_VERSION=$(curl -s https://api.github.com/repos/microsoft/azure-pipelines-agent/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
-    wget -q "https://vstsagentpackage.azureedge.net/agent/\$AGENT_VERSION/vsts-agent-linux-x64-\$AGENT_VERSION.tar.gz"
-    sudo -u adoagent tar zxf "vsts-agent-linux-x64-\$AGENT_VERSION.tar.gz"
-    rm "vsts-agent-linux-x64-\$AGENT_VERSION.tar.gz"
+    AGENT_VERSION=$$(curl -s https://api.github.com/repos/microsoft/azure-pipelines-agent/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
+    wget -q "https://vstsagentpackage.azureedge.net/agent/$$AGENT_VERSION/vsts-agent-linux-x64-$$AGENT_VERSION.tar.gz"
+    sudo -u adoagent tar zxf "vsts-agent-linux-x64-$$AGENT_VERSION.tar.gz"
+    rm "vsts-agent-linux-x64-$$AGENT_VERSION.tar.gz"
     
     # Install dependencies
     sudo -u adoagent ./bin/installdependencies.sh
     
     # Get PAT from AWS Secrets Manager
     log "Retrieving ADO PAT from Secrets Manager..."
-    ADO_PAT=$(aws secretsmanager get-secret-value --region $AWS_REGION --secret-id "$ADO_PAT_SECRET" --query SecretString --output text)
+    ADO_PAT=$$(aws secretsmanager get-secret-value --region $$AWS_REGION --secret-id "$$ADO_PAT_SECRET" --query SecretString --output text)
     
-    if [ -n "$ADO_PAT" ]; then
+    if [ -n "$$ADO_PAT" ]; then
         log "Configuring ADO agent..."
         
         # Configure agent
         sudo -u adoagent ./config.sh \
             --unattended \
-            --url "$ADO_ORGANIZATION_URL" \
+            --url "$$ADO_ORGANIZATION_URL" \
             --auth pat \
-            --token "$ADO_PAT" \
-            --pool "$ADO_AGENT_POOL" \
-            --agent "$(hostname)-$ENVIRONMENT_TYPE" \
+            --token "$$ADO_PAT" \
+            --pool "$$ADO_AGENT_POOL" \
+            --agent "$$(hostname)-$$ENVIRONMENT_TYPE" \
             --acceptTeeEula \
             --work /home/adoagent/agent/_work
         
@@ -129,7 +129,7 @@ if [ "$ADO_ORGANIZATION_URL" != "" ] && [ "$ADO_PAT_SECRET" != "" ]; then
     fi
     
     # --- PART 3: Deployment Tools Setup ---
-    if [ "$ENABLE_AUTO_DEPLOYMENT" = "true" ]; then
+    if [ "$$ENABLE_AUTO_DEPLOYMENT" = "true" ]; then
         log "Setting up deployment capabilities..."
         
         # Install additional deployment tools
@@ -143,21 +143,21 @@ if [ "$ADO_ORGANIZATION_URL" != "" ] && [ "$ADO_PAT_SECRET" != "" ]; then
         
         # Install Terraform for infrastructure deployments
         wget -O- https://apt.releases.hashicorp.com/gpg | gpg --dearmor | tee /usr/share/keyrings/hashicorp-archive-keyring.gpg
-        echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list
+        echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $$(lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list
         apt-get update
         apt-get install -y terraform
         
         # Setup deployment SSH key if provided
-        if [ "$DEPLOYMENT_SSH_SECRET" != "" ]; then
+        if [ "$$DEPLOYMENT_SSH_SECRET" != "" ]; then
             log "Setting up deployment SSH key..."
             
             # Get SSH key from Secrets Manager
-            DEPLOYMENT_SSH_KEY=$(aws secretsmanager get-secret-value --region $AWS_REGION --secret-id "$DEPLOYMENT_SSH_SECRET" --query SecretString --output text)
+            DEPLOYMENT_SSH_KEY=$$(aws secretsmanager get-secret-value --region $$AWS_REGION --secret-id "$$DEPLOYMENT_SSH_SECRET" --query SecretString --output text)
             
-            if [ -n "$DEPLOYMENT_SSH_KEY" ]; then
+            if [ -n "$$DEPLOYMENT_SSH_KEY" ]; then
                 # Setup SSH key for agent user
                 sudo -u adoagent mkdir -p /home/adoagent/.ssh
-                echo "$DEPLOYMENT_SSH_KEY" | sudo -u adoagent tee /home/adoagent/.ssh/id_rsa
+                echo "$$DEPLOYMENT_SSH_KEY" | sudo -u adoagent tee /home/adoagent/.ssh/id_rsa
                 sudo -u adoagent chmod 600 /home/adoagent/.ssh/id_rsa
                 sudo -u adoagent ssh-keygen -y -f /home/adoagent/.ssh/id_rsa | sudo -u adoagent tee /home/adoagent/.ssh/id_rsa.pub
                 
@@ -191,7 +191,7 @@ set -e
 
 HOST_IP="$1"
 DOCKER_IMAGE="$2"
-SERVICE_NAME="${3:-app}"
+SERVICE_NAME="${$${3:-app}}"
 
 if [ -z "$HOST_IP" ] || [ -z "$DOCKER_IMAGE" ]; then
     echo "Usage: $0 <host-ip> <docker-image> [service-name]"
@@ -268,6 +268,6 @@ systemctl start ecr-login.timer
 log "ADO Agent and deployment setup completed successfully"
 
 # Create completion marker
-echo "ado-agent setup completed at $(date)" > /tmp/ado-agent-completed
+echo "ado-agent setup completed at $$(date)" > /tmp/ado-agent-completed
 
 exit 0

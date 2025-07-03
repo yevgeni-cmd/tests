@@ -241,13 +241,6 @@ variable "default_instance_type" {
   default     = "t3.small"
 }
 
-# Add GPU-specific AMI variable
-variable "custom_gpu_ami_id" {
-  description = "Custom AMI ID for GPU instances (with NVIDIA drivers)"
-  type        = string
-  default     = null
-}
-
 # Azure DevOps Agent Configuration
 variable "enable_ado_agents" {
   description = "Whether to install Azure DevOps agents on DevOps hosts"

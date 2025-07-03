@@ -230,7 +230,19 @@ resource "aws_vpc_endpoint" "interface" {
     Name = "${var.name}-${each.value}-interface-endpoint"
   }
 
-  depends_on = [aws_subnet.private, aws_security_group.vpc_endpoints]
+  depends_on = [
+    aws_vpc.this,
+    aws_subnet.private, 
+    aws_security_group.vpc_endpoints,
+    aws_route_table.private
+  ]
+
+  lifecycle {
+    precondition {
+      condition = aws_vpc.this.enable_dns_support == true && aws_vpc.this.enable_dns_hostnames == true
+      error_message = "VPC must have DNS support and DNS hostnames enabled for Private DNS to work on VPC endpoints."
+    }
+  }
 }
 
 # Optional: Create Route53 private hosted zone for custom DNS resolution
