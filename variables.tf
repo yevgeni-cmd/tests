@@ -29,7 +29,6 @@ variable "remote_region" {
 # Custom AMI Configuration
 ################################################################################
 
-# ADDED: Custom AMI variables
 variable "custom_standard_ami_id" {
   description = "Custom AMI ID with Docker for standard instances (untrusted hosts, trusted non-GPU hosts)."
   type        = string
@@ -181,16 +180,11 @@ variable "srt_udp_ports" {
   default     = [8890]
 }
 
-variable "peering_udp_port_range" {
-  description = "UDP port range for traffic forwarding between untrusted and trusted scrub hosts"
-  type = object({
-    from = number
-    to   = number
-  })
-  default = {
-    from = 50000
-    to   = 51000
-  }
+# FIXED: Changed from range to single port for better security
+variable "peering_udp_port" {
+  description = "Static UDP port for MediaMTX communication between trusted scrub and streaming"
+  type        = number
+  default     = 50555
 }
 
 # Instance type configurations by role

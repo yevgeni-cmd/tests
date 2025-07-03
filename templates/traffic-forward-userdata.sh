@@ -59,10 +59,10 @@ echo "SSH configuration completed."
 # --- PART 2: Traffic Forwarding Setup ---
 echo "=== PART 2: Traffic Forwarding Setup ==="
 
-# Configuration (Passed from Terraform)
+# Configuration (Passed from Terraform) - FIXED: Use template variables
 TRUSTED_SCRUB_VPC_CIDR="${trusted_scrub_vpc_cidr}"
 AWS_REGION="${aws_region}"
-TRUSTED_HOST_TAG_NAME="*trusted-scrub-host*"
+TRUSTED_HOST_TAG_NAME="${trusted_host_tag_name}"
 
 echo "Configuration:"
 echo "  AWS_REGION: $AWS_REGION"
@@ -148,6 +148,7 @@ fi
 # --- PART 3: ECR Auto-Login Setup ---
 echo "=== PART 3: ECR Auto-Login Setup ==="
 
+# FIXED: Use template variables
 ECR_REGISTRY="${ecr_registry_url}"
 
 # Wait for Docker to be available

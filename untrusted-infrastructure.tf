@@ -115,10 +115,11 @@ module "untrusted_scrub_host" {
   
   custom_ami_id = var.use_custom_amis ? var.custom_standard_ami_id : null
   
-  # User-data with Docker network fix for custom AMI
+  # FIXED: User-data with proper template variables
   user_data = templatefile("${path.module}/templates/combined-scrub-userdata.sh", {
     trusted_scrub_vpc_cidr = var.trusted_vpc_cidrs["streaming_scrub"]
     aws_region            = var.primary_region
+    trusted_host_tag_name = "${var.project_name}-trusted-scrub-host"
   })
   
   allowed_ssh_cidrs = [
@@ -142,8 +143,11 @@ module "untrusted_devops_host" {
   vpc_id        = module.untrusted_vpc_devops.vpc_id
   enable_ecr_access = true
   associate_public_ip = true
+  
   custom_ami_id = var.use_custom_amis ? var.custom_standard_ami_id : null
-  user_data = templatefile("${path.module}/templates/ecr-auto-login-userdata.sh", {
+  
+  # FIXED: Conditional user data based on ADO configuration
+  user_data = var.enable_ado_agents ? templatefile("${path.module}/templates/ado-agent-userdata.sh", {
     aws_region                    = var.primary_region
     ecr_registry_url             = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.primary_region}.amazonaws.com"
     ado_organization_url         = var.ado_organization_url
@@ -152,6 +156,9 @@ module "untrusted_devops_host" {
     deployment_ssh_key_secret_name = var.enable_auto_deployment ? aws_secretsmanager_secret.deployment_ssh_key[0].name : ""
     enable_auto_deployment       = var.enable_auto_deployment
     environment_type             = "untrusted"
+  }) : templatefile("${path.module}/templates/ecr-auto-login-userdata.sh", {
+    aws_region       = var.primary_region
+    ecr_registry_url = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.primary_region}.amazonaws.com"
   })
   
   allowed_ssh_cidrs = [
@@ -160,11 +167,11 @@ module "untrusted_devops_host" {
   ]
 }
 
-# Add inline policy for ADO secrets access to untrusted DevOps host
+# FIXED: Proper IAM policy with dependencies
 resource "aws_iam_role_policy" "untrusted_devops_ado_secrets" {
   count = var.enable_ado_agents ? 1 : 0
   name  = "ado-secrets-access"
-  role  = "${var.project_name}-untrusted-devops-host-role"  # Standard role name pattern from EC2 module
+  role  = data.aws_iam_role.untrusted_devops_host_role[0].name
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -182,10 +189,21 @@ resource "aws_iam_role_policy" "untrusted_devops_ado_secrets" {
     ]
   })
 
+  depends_on = [
+    module.untrusted_devops_host,
+    aws_secretsmanager_secret.ado_pat,
+    aws_secretsmanager_secret.deployment_ssh_key
+  ]
+}
+
+# FIXED: Add data source to get IAM role name from EC2 module
+data "aws_iam_role" "untrusted_devops_host_role" {
+  count = var.enable_ado_agents ? 1 : 0
+  name  = "${var.project_name}-untrusted-devops-host-role"
   depends_on = [module.untrusted_devops_host]
 }
 
-
+# Elastic IP for static ingress endpoint
 resource "aws_eip" "untrusted_ingress_eip" {
   provider = aws.primary
   domain   = "vpc"
@@ -208,4 +226,32 @@ resource "aws_eip_association" "untrusted_ingress_eip_assoc" {
     aws_eip.untrusted_ingress_eip,
     module.untrusted_ingress_host
   ]
+}
+
+# VPC Peering Connection from Untrusted Scrub to Trusted Scrub
+resource "aws_vpc_peering_connection" "untrusted_to_trusted_scrub" {
+  provider    = aws.primary
+  vpc_id      = module.untrusted_vpc_streaming_scrub.vpc_id
+  peer_vpc_id = module.trusted_vpc_streaming_scrub.vpc_id
+  peer_region = var.primary_region
+  auto_accept = true
+
+  tags = {
+    Name = "${var.project_name}-untrusted-to-trusted-scrub-peering"
+  }
+
+  depends_on = [
+    module.untrusted_vpc_streaming_scrub,
+    module.trusted_vpc_streaming_scrub
+  ]
+}
+
+# Route from Untrusted Scrub to Trusted Scrub
+resource "aws_route" "untrusted_scrub_to_trusted_scrub" {
+  provider               = aws.primary
+  route_table_id         = module.untrusted_vpc_streaming_scrub.private_route_table_id
+  destination_cidr_block = var.trusted_vpc_cidrs["streaming_scrub"]
+  vpc_peering_connection_id = aws_vpc_peering_connection.untrusted_to_trusted_scrub.id
+
+  depends_on = [aws_vpc_peering_connection.untrusted_to_trusted_scrub]
 }

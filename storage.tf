@@ -61,3 +61,123 @@ module "trusted_s3_iot" {
   providers   = { aws = aws.primary }
   bucket_name = "${var.project_name}-trusted-iot-data-${data.aws_caller_identity.current.account_id}"
 }
+
+# ECR Policy for Untrusted Environment - Only untrusted instances can access
+resource "aws_ecr_repository_policy" "untrusted_policy" {
+  repository = module.untrusted_ecr.repository_url
+  
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowUntrustedInstancesOnly"
+        Effect = "Allow"
+        Principal = {
+          AWS = [
+            "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.project_name}-untrusted-*"
+          ]
+        }
+        Action = [
+          "ecr:GetAuthorizationToken",
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+          "ecr:PutImage",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload"
+        ]
+      }
+    ]
+  })
+}
+
+# ECR Policy for Trusted DevOps - Only trusted instances can access
+resource "aws_ecr_repository_policy" "trusted_devops_policy" {
+  repository = module.trusted_ecr_devops.repository_url
+  
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowTrustedInstancesOnly"
+        Effect = "Allow"
+        Principal = {
+          AWS = [
+            "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.project_name}-trusted-*"
+          ]
+        }
+        Action = [
+          "ecr:GetAuthorizationToken",
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+          "ecr:PutImage",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload"
+        ]
+      }
+    ]
+  })
+}
+
+# ECR Policy for Trusted Streaming - Only trusted instances can access
+resource "aws_ecr_repository_policy" "trusted_streaming_policy" {
+  repository = module.trusted_ecr_streaming.repository_url
+  
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowTrustedInstancesOnly"
+        Effect = "Allow"
+        Principal = {
+          AWS = [
+            "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.project_name}-trusted-*"
+          ]
+        }
+        Action = [
+          "ecr:GetAuthorizationToken",
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+          "ecr:PutImage",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload"
+        ]
+      }
+    ]
+  })
+}
+
+# ECR Policy for Trusted IoT - Only trusted instances can access
+resource "aws_ecr_repository_policy" "trusted_iot_policy" {
+  repository = module.trusted_ecr_iot.repository_url
+  
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowTrustedInstancesOnly"
+        Effect = "Allow"
+        Principal = {
+          AWS = [
+            "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.project_name}-trusted-*"
+          ]
+        }
+        Action = [
+          "ecr:GetAuthorizationToken",
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+          "ecr:PutImage",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload"
+        ]
+      }
+    ]
+  })
+}

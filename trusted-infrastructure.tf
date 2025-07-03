@@ -109,11 +109,12 @@ module "trusted_scrub_host" {
   
   custom_ami_id = var.use_custom_amis ? var.custom_standard_ami_id : null
   
-  # UPDATE: Combined user-data with ECR auto-login
-  user_data = templatefile("${path.module}/templates/ecr-auto-login-userdata.sh", {
+  # FIXED: Combined user-data with proper template variables
+  user_data = templatefile("${path.module}/templates/traffic-forward-userdata.sh", {
     trusted_scrub_vpc_cidr = var.trusted_vpc_cidrs["streaming_scrub"]
     aws_region            = var.primary_region
     ecr_registry_url      = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.primary_region}.amazonaws.com"
+    trusted_host_tag_name = "${var.project_name}-trusted-scrub-host"
   })
   
   allowed_ssh_cidrs = [
@@ -133,13 +134,13 @@ module "trusted_streaming_host" {
   instance_name     = "${var.project_name}-trusted-streaming-host"
   key_name          = var.trusted_ssh_key_name
   instance_os       = var.instance_os
-  # Smart instance type selection: GPU if enabled, otherwise use configured type
-  instance_type     = var.use_gpu_for_streaming ? var.gpu_instance_type : var.instance_types.trusted_streaming
+  # FIXED: Validate GPU configuration before using
+  instance_type     = var.use_gpu_for_streaming && var.custom_gpu_ami_id != null ? var.gpu_instance_type : var.instance_types.trusted_streaming
   subnet_id         = module.trusted_vpc_streaming.private_subnets_by_name["streaming-docker"].id
   vpc_id            = module.trusted_vpc_streaming.vpc_id
   enable_ecr_access = true
   
-  # Smart AMI selection: GPU AMI if using GPU and available, otherwise standard AMI
+  # FIXED: Smart AMI selection with validation
   custom_ami_id = var.use_custom_amis ? (
     var.use_gpu_for_streaming && var.custom_gpu_ami_id != null ? 
     var.custom_gpu_ami_id : 
@@ -161,7 +162,6 @@ module "trusted_streaming_host" {
   ]
 }
 
-
 # Trusted DevOps Host
 module "trusted_devops_host" {
   source        = "./modules/ec2_instance"
@@ -173,11 +173,12 @@ module "trusted_devops_host" {
   subnet_id     = module.trusted_vpc_devops.public_subnets_by_name["agent"].id
   vpc_id        = module.trusted_vpc_devops.vpc_id
   enable_ecr_access = true
+  associate_public_ip = true
   
   custom_ami_id = var.use_custom_amis ? var.custom_standard_ami_id : null
   
-  # ADO Agent + ECR user data
-  user_data = templatefile("${path.module}/templates/ecr-auto-login-userdata.sh", {
+  # FIXED: Conditional user data based on ADO configuration
+  user_data = var.enable_ado_agents ? templatefile("${path.module}/templates/ado-agent-userdata.sh", {
     aws_region                    = var.primary_region
     ecr_registry_url             = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.primary_region}.amazonaws.com"
     ado_organization_url         = var.ado_organization_url
@@ -186,7 +187,9 @@ module "trusted_devops_host" {
     deployment_ssh_key_secret_name = var.enable_auto_deployment ? aws_secretsmanager_secret.deployment_ssh_key[0].name : ""
     enable_auto_deployment       = var.enable_auto_deployment
     environment_type             = "trusted"
-    associate_public_ip = true
+  }) : templatefile("${path.module}/templates/ecr-auto-login-userdata.sh", {
+    aws_region       = var.primary_region
+    ecr_registry_url = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.primary_region}.amazonaws.com"
   })
   
   allowed_ssh_cidrs = [
@@ -195,12 +198,11 @@ module "trusted_devops_host" {
   ]
 }
 
-
-# Add inline policy for ADO secrets access to trusted DevOps host
+# FIXED: Proper IAM policy with dependencies
 resource "aws_iam_role_policy" "trusted_devops_ado_secrets" {
   count = var.enable_ado_agents ? 1 : 0
   name  = "ado-secrets-access"
-  role  = "${var.project_name}-trusted-devops-host-role"  # Standard role name pattern from EC2 module
+  role  = module.trusted_devops_host.instance_id # Use module reference instead of hardcoded name
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -218,5 +220,17 @@ resource "aws_iam_role_policy" "trusted_devops_ado_secrets" {
     ]
   })
 
+  depends_on = [
+    module.trusted_devops_host,
+    aws_secretsmanager_secret.ado_pat,
+    aws_secretsmanager_secret.deployment_ssh_key
+  ]
+}
+
+# FIXED: Add data source to get IAM role name from EC2 module
+data "aws_iam_role" "trusted_devops_host_role" {
+  count = var.enable_ado_agents ? 1 : 0
+  name  = "${var.project_name}-trusted-devops-host-role"
   depends_on = [module.trusted_devops_host]
 }
+

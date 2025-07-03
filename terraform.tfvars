@@ -38,11 +38,11 @@ instance_types = {
 }
 
 # GPU configuration for streaming
-use_gpu_for_streaming = false          # Set to true to enable GPU
+use_gpu_for_streaming = true          # Set to true to enable GPU
 gpu_instance_type     = "g5.xlarge"   # GPU instance type when enabled
 
 # GPU-enabled custom AMI (create this after building GPU AMI)
-custom_gpu_ami_id = "ami-xxxxxxxxx"  # Replace with your GPU AMI ID when available
+custom_gpu_ami_id = "ami-0ea2fce7f7afb4f4c"  # Replace with your GPU AMI ID when available
 
 # UDP ports for SRT streaming
 srt_udp_ports = [8890]
@@ -53,11 +53,12 @@ srt_udp_ports = [8890]
 
 
 # Azure DevOps Agent Configuration
-enable_ado_agents      = false
-ado_organization_url   = "https://dev.azure.com/yourorganization"  # Replace with your ADO org
-ado_agent_pool_name    = "Self-Hosted-AWS"                        # Replace with your pool name
-ado_pat_secret_name    = "poc-ado-pat"                            # Will be created by Terraform
+enable_ado_agents      = true
+ado_organization_url   = "https://dev.azure.com/cloudburstnet"
+ado_agent_pool_name    = "Self-Hosted-AWS"
+ado_pat_secret_name    = "poc-ado-pat"           
 
 # Auto-deployment configuration
-enable_auto_deployment         = false
+enable_auto_deployment         = true
 deployment_ssh_key_secret_name = "poc-deployment-ssh-key"         # Will be created by Terraform
+
