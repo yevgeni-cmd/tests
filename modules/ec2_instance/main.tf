@@ -8,7 +8,6 @@ terraform {
 }
 
 data "aws_ami" "selected" {
-  # UPDATED: Use custom AMI if provided, otherwise use default AMI filters
   count       = var.custom_ami_id != null ? 0 : 1
   most_recent = true
   owners      = [var.ami_owners[var.instance_os]]
@@ -23,7 +22,6 @@ data "aws_ami" "selected" {
   }
 }
 
-# Use custom AMI if provided, otherwise use the discovered AMI
 locals {
   ami_id = var.custom_ami_id != null ? var.custom_ami_id : data.aws_ami.selected[0].id
 }
@@ -42,7 +40,6 @@ resource "aws_iam_role_policy_attachment" "ecr_policy" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
 }
 
-# ADDED: Policy for EC2 describe permissions (needed for untrusted scrub user-data)
 resource "aws_iam_role_policy" "ec2_describe_policy" {
   count = var.enable_ec2_describe ? 1 : 0
   name  = "${var.instance_name}-ec2-describe-policy"
@@ -78,7 +75,7 @@ resource "aws_security_group" "this" {
       from_port   = ingress.value
       to_port     = ingress.value
       protocol    = "udp"
-      cidr_blocks = ["0.0.0.0/0"]
+      cidr_blocks = var.allowed_udp_cidrs
     }
   }
 
@@ -92,21 +89,31 @@ resource "aws_security_group" "this" {
     }
   }
 
-  dynamic "ingress" {
-    for_each = toset(var.allowed_ingress_cidrs)
-    content {
-      from_port   = 0
-      to_port     = 0
-      protocol    = "-1"
-      cidr_blocks = [ingress.value]
-    }
+  egress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "HTTPS for ECR/updates"
   }
 
   egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
+    from_port   = 1024
+    to_port     = 65535
+    protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
+    description = "Ephemeral ports for return traffic"
+  }
+
+  dynamic "egress" {
+    for_each = toset(var.allowed_egress_udp_ports)
+    content {
+      from_port   = egress.value
+      to_port     = egress.value
+      protocol    = "udp"
+      cidr_blocks = var.allowed_egress_udp_cidrs
+      description = "UDP egress to specific CIDRs"
+    }
   }
 
   tags = { Name = "${var.instance_name}-sg" }
@@ -120,9 +127,7 @@ resource "aws_instance" "this" {
   vpc_security_group_ids      = [aws_security_group.this.id]
   iam_instance_profile        = aws_iam_instance_profile.ec2_profile.name
   associate_public_ip_address = var.associate_public_ip
-  
-  # ADDED: User data support
-  user_data = var.user_data
-  
+  user_data                   = var.user_data
+
   tags = { Name = var.instance_name }
 }

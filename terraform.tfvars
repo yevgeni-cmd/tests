@@ -53,12 +53,16 @@ srt_udp_ports = [8890]
 
 
 # Azure DevOps Agent Configuration
-enable_ado_agents      = true
+enable_ado_agents      = false
 ado_organization_url   = "https://dev.azure.com/cloudburstnet"
 ado_agent_pool_name    = "Self-Hosted-AWS"
 ado_pat_secret_name    = "poc-ado-pat"           
 
 # Auto-deployment configuration
-enable_auto_deployment         = true
+enable_auto_deployment         = false
 deployment_ssh_key_secret_name = "poc-deployment-ssh-key"         # Will be created by Terraform
 
+peering_udp_port = 50555
+
+trusted_asn = 64512
+untrusted_asn = 64513

@@ -1,12 +1,12 @@
 ################################################################################
-# UNTRUSTED ENVIRONMENT (IL) - Infrastructure
+# UNTRUSTED ENVIRONMENT - Infrastructure
 ################################################################################
 
 module "untrusted_tgw" {
   source      = "./modules/tgw"
   providers   = { aws = aws.primary }
   name_prefix = "${var.project_name}-untrusted"
-  description = "TGW for the Untrusted IL Environment"
+  description = "TGW for the Untrusted Environment"
   asn         = var.untrusted_asn
 }
 
@@ -20,11 +20,10 @@ module "untrusted_vpc_streaming_ingress" {
   azs        = ["${var.primary_region}a"]
   aws_region = var.primary_region
   tgw_id     = module.untrusted_tgw.tgw_id
-
   create_igw = true
   public_subnet_names  = ["ec2"]
   private_subnet_names = ["tgw-attach", "endpoints"]
-  vpc_endpoints        = ["ecr.api", "ecr.dkr", "s3"]
+  vpc_endpoints        = ["ecr.api", "ecr.dkr"]
 }
 
 module "untrusted_vpc_streaming_scrub" {
@@ -35,25 +34,8 @@ module "untrusted_vpc_streaming_scrub" {
   azs        = ["${var.primary_region}a"]
   aws_region = var.primary_region
   tgw_id     = module.untrusted_tgw.tgw_id
-
-  private_subnet_names = ["app", "endpoints", "tgw-attach"]
+  private_subnet_names = ["app", "tgw-attach", "endpoints"]
   vpc_endpoints        = ["ecr.api", "ecr.dkr"]
-}
-
-module "untrusted_vpc_iot" {
-  source     = "./modules/vpc"
-  providers  = { aws = aws.primary }
-  name       = "${var.project_name}-untrusted-iot"
-  cidr       = var.untrusted_vpc_cidrs["iot_management"]
-  azs        = ["${var.primary_region}a"]
-  aws_region = var.primary_region
-  tgw_id     = module.untrusted_tgw.tgw_id
-
-  create_nat_gateway = true
-  create_igw         = true
-  public_subnet_names  = ["nat"]
-  private_subnet_names = ["lambda", "tgw-attach", "endpoints"]
-  vpc_endpoints        = ["ecr.api", "ecr.dkr", "sqs"]
 }
 
 module "untrusted_vpc_devops" {
@@ -64,7 +46,6 @@ module "untrusted_vpc_devops" {
   azs        = ["${var.primary_region}a"]
   aws_region = var.primary_region
   tgw_id     = module.untrusted_tgw.tgw_id
-
   create_igw = true
   public_subnet_names  = ["agent"]
   private_subnet_names = ["vpn", "tgw-attach", "endpoints"]
@@ -73,7 +54,6 @@ module "untrusted_vpc_devops" {
 
 # --- Untrusted EC2 Instances ---
 
-# Streaming Ingress Host
 module "untrusted_ingress_host" {
   source              = "./modules/ec2_instance"
   providers           = { aws = aws.primary }
@@ -85,22 +65,18 @@ module "untrusted_ingress_host" {
   vpc_id              = module.untrusted_vpc_streaming_ingress.vpc_id
   associate_public_ip = true
   enable_ecr_access   = true
-  
-  custom_ami_id = var.use_custom_amis ? var.custom_standard_ami_id : null
-  
+  custom_ami_id       = var.use_custom_amis ? var.custom_standard_ami_id : null
+  allowed_ssh_cidrs   = [var.untrusted_vpn_client_cidr]
+  allowed_udp_ports   = var.srt_udp_ports
+  allowed_udp_cidrs   = ["0.0.0.0/0"]
+  allowed_egress_udp_ports = [var.peering_udp_port]
+  allowed_egress_udp_cidrs = [var.untrusted_vpc_cidrs["streaming_scrub"]]
   user_data = templatefile("${path.module}/templates/ecr-auto-login-userdata.sh", {
     aws_region       = var.primary_region
     ecr_registry_url = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.primary_region}.amazonaws.com"
   })
-  
-  allowed_ssh_cidrs = [
-    var.untrusted_vpn_client_cidr,
-    var.untrusted_vpc_cidrs["devops"]
-  ]
-  allowed_udp_ports = var.srt_udp_ports
 }
 
-# Streaming Scrub Host
 module "untrusted_scrub_host" {
   source            = "./modules/ec2_instance"
   providers         = { aws = aws.primary }
@@ -112,41 +88,36 @@ module "untrusted_scrub_host" {
   vpc_id            = module.untrusted_vpc_streaming_scrub.vpc_id
   enable_ecr_access = true
   enable_ec2_describe = true
-  
-  custom_ami_id = var.use_custom_amis ? var.custom_standard_ami_id : null
-  
-  # FIXED: User-data with proper template variables
+  custom_ami_id     = var.use_custom_amis ? var.custom_standard_ami_id : null
+  allowed_ssh_cidrs = [var.untrusted_vpn_client_cidr]
+  allowed_udp_ports = [var.peering_udp_port]
+  allowed_udp_cidrs = [var.untrusted_vpc_cidrs["streaming_ingress"]]
+  allowed_egress_udp_ports = [var.peering_udp_port]
+  allowed_egress_udp_cidrs = [var.trusted_vpc_cidrs["streaming_scrub"]]
   user_data = templatefile("${path.module}/templates/combined-scrub-userdata.sh", {
     trusted_scrub_vpc_cidr = var.trusted_vpc_cidrs["streaming_scrub"]
     aws_region            = var.primary_region
     trusted_host_tag_name = "${var.project_name}-trusted-scrub-host"
   })
-  
-  allowed_ssh_cidrs = [
-    var.untrusted_vpn_client_cidr,
-    var.untrusted_vpc_cidrs["devops"]
-  ]
-  allowed_ingress_cidrs = [
-    var.untrusted_vpc_cidrs["streaming_ingress"]
-  ]
 }
 
-# Untrusted DevOps Host
 module "untrusted_devops_host" {
-  source        = "./modules/ec2_instance"
-  providers     = { aws = aws.primary }
-  instance_name = "${var.project_name}-untrusted-devops-host"
-  key_name      = var.untrusted_ssh_key_name
-  instance_os   = var.instance_os
-  instance_type = var.instance_types.untrusted_devops
-  subnet_id = module.untrusted_vpc_devops.public_subnets_by_name["agent"].id
-  vpc_id        = module.untrusted_vpc_devops.vpc_id
+  source            = "./modules/ec2_instance"
+  providers         = { aws = aws.primary }
+  instance_name     = "${var.project_name}-untrusted-devops-host"
+  key_name          = var.untrusted_ssh_key_name
+  instance_os       = var.instance_os
+  instance_type     = var.instance_types.untrusted_devops
+  subnet_id         = module.untrusted_vpc_devops.public_subnets_by_name["agent"].id
+  vpc_id            = module.untrusted_vpc_devops.vpc_id
   enable_ecr_access = true
   associate_public_ip = true
-  
-  custom_ami_id = var.use_custom_amis ? var.custom_standard_ami_id : null
-  
-  # FIXED: Conditional user data based on ADO configuration
+  custom_ami_id     = var.use_custom_amis ? var.custom_standard_ami_id : null
+  allowed_ssh_cidrs = [var.untrusted_vpn_client_cidr]
+  allowed_udp_ports = []
+  allowed_udp_cidrs = []
+  allowed_egress_udp_ports = []
+  allowed_egress_udp_cidrs = []
   user_data = var.enable_ado_agents ? templatefile("${path.module}/templates/ado-agent-userdata.sh", {
     aws_region                    = var.primary_region
     ecr_registry_url             = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.primary_region}.amazonaws.com"
@@ -160,27 +131,19 @@ module "untrusted_devops_host" {
     aws_region       = var.primary_region
     ecr_registry_url = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.primary_region}.amazonaws.com"
   })
-  
-  allowed_ssh_cidrs = [
-    var.untrusted_vpn_client_cidr,
-    var.untrusted_vpc_cidrs["devops"]
-  ]
 }
 
-# FIXED: Proper IAM policy with dependencies
+# IAM Policy for ADO Secrets
 resource "aws_iam_role_policy" "untrusted_devops_ado_secrets" {
   count = var.enable_ado_agents ? 1 : 0
   name  = "ado-secrets-access"
-  role  = data.aws_iam_role.untrusted_devops_host_role[0].name
-
+  role  = module.untrusted_devops_host.instance_id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
         Effect = "Allow"
-        Action = [
-          "secretsmanager:GetSecretValue"
-        ]
+        Action = ["secretsmanager:GetSecretValue"]
         Resource = compact([
           var.enable_ado_agents ? aws_secretsmanager_secret.ado_pat[0].arn : "",
           var.enable_auto_deployment ? aws_secretsmanager_secret.deployment_ssh_key[0].arn : ""
@@ -188,70 +151,11 @@ resource "aws_iam_role_policy" "untrusted_devops_ado_secrets" {
       }
     ]
   })
-
-  depends_on = [
-    module.untrusted_devops_host,
-    aws_secretsmanager_secret.ado_pat,
-    aws_secretsmanager_secret.deployment_ssh_key
-  ]
+  depends_on = [module.untrusted_devops_host, aws_secretsmanager_secret.ado_pat, aws_secretsmanager_secret.deployment_ssh_key]
 }
 
-# FIXED: Add data source to get IAM role name from EC2 module
 data "aws_iam_role" "untrusted_devops_host_role" {
   count = var.enable_ado_agents ? 1 : 0
   name  = "${var.project_name}-untrusted-devops-host-role"
   depends_on = [module.untrusted_devops_host]
-}
-
-# Elastic IP for static ingress endpoint
-resource "aws_eip" "untrusted_ingress_eip" {
-  provider = aws.primary
-  domain   = "vpc"
-  
-  tags = {
-    Name = "${var.project_name}-untrusted-ingress-eip"
-    Purpose = "static-ip-for-streaming-ingress"
-  }
-  
-  depends_on = [module.untrusted_vpc_streaming_ingress]
-}
-
-# Associate Elastic IP with Untrusted Ingress Host
-resource "aws_eip_association" "untrusted_ingress_eip_assoc" {
-  provider    = aws.primary
-  instance_id = module.untrusted_ingress_host.instance_id
-  allocation_id = aws_eip.untrusted_ingress_eip.id
-  
-  depends_on = [
-    aws_eip.untrusted_ingress_eip,
-    module.untrusted_ingress_host
-  ]
-}
-
-# VPC Peering Connection from Untrusted Scrub to Trusted Scrub
-resource "aws_vpc_peering_connection" "untrusted_to_trusted_scrub" {
-  provider    = aws.primary
-  vpc_id      = module.untrusted_vpc_streaming_scrub.vpc_id
-  peer_vpc_id = module.trusted_vpc_streaming_scrub.vpc_id
-  peer_region = var.primary_region
-  auto_accept = true
-
-  tags = {
-    Name = "${var.project_name}-untrusted-to-trusted-scrub-peering"
-  }
-
-  depends_on = [
-    module.untrusted_vpc_streaming_scrub,
-    module.trusted_vpc_streaming_scrub
-  ]
-}
-
-# Route from Untrusted Scrub to Trusted Scrub
-resource "aws_route" "untrusted_scrub_to_trusted_scrub" {
-  provider               = aws.primary
-  route_table_id         = module.untrusted_vpc_streaming_scrub.private_route_table_id
-  destination_cidr_block = var.trusted_vpc_cidrs["streaming_scrub"]
-  vpc_peering_connection_id = aws_vpc_peering_connection.untrusted_to_trusted_scrub.id
-
-  depends_on = [aws_vpc_peering_connection.untrusted_to_trusted_scrub]
 }

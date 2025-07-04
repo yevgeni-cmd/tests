@@ -272,3 +272,16 @@ variable "deployment_ssh_key_secret_name" {
   type        = string
   default     = ""
 }
+
+variable "untrusted_cidr_block" {
+  description = "The CIDR block for the untrusted"
+  type        = string
+  default     = "172.19.0.0/16"
+}
+
+variable "trusted_cidr_block" {
+  description = "The CIDR block for the trusted"
+  type        = string
+  default     = "172.16.0.0/16"
+}
+

@@ -1,251 +1,67 @@
-resource "aws_network_acl" "trusted_scrub_app_nacl" {
-  provider   = aws.primary
-  vpc_id     = module.trusted_vpc_streaming_scrub.vpc_id
-  subnet_ids = [module.trusted_vpc_streaming_scrub.private_subnets_by_name["app"].id]
+################################################################################
+# Network ACLs - All Environments
+################################################################################
 
-  # Allow SSH inbound from trusted VPN clients
+# --- Untrusted Streaming Ingress VPC NACL ---
+resource "aws_network_acl" "untrusted_ingress_nacl" {
+  provider   = aws.primary
+  vpc_id     = module.untrusted_vpc_streaming_ingress.vpc_id
+  subnet_ids = values(module.untrusted_vpc_streaming_ingress.public_subnets_by_name)[*].id
+
+  # Inbound: Allow UDP 8890 from internet
   ingress {
+    protocol   = "udp"
     rule_no    = 100
-    protocol   = "tcp"
     action     = "allow"
-    cidr_block = var.trusted_vpn_client_cidr
-    from_port  = 22
-    to_port    = 22
+    cidr_block = "0.0.0.0/0"
+    from_port  = 8890
+    to_port    = 8890
   }
 
-  # Allow SSH inbound from trusted VPN subnet
+  # Inbound: Allow SSH from VPN clients
   ingress {
+    protocol   = "tcp"
     rule_no    = 110
-    protocol   = "tcp"
-    action     = "allow"
-    cidr_block = module.trusted_vpc_devops.private_subnets_by_name["vpn"].cidr_block
-    from_port  = 22
-    to_port    = 22
-  }
-
-  # FIXED: SRT ports from untrusted scrub via VPC peering (ONE-WAY)
-  dynamic "ingress" {
-    for_each = { for i, port in var.srt_udp_ports : i => port }
-    content {
-      rule_no    = 200 + ingress.key
-      protocol   = "udp"
-      action     = "allow"
-      cidr_block = var.untrusted_vpc_cidrs["streaming_scrub"]
-      from_port  = ingress.value
-      to_port    = ingress.value
-    }
-  }
-
-  # FIXED: Static MediaMTX port from untrusted scrub via VPC peering (ONE-WAY)
-  ingress {
-    rule_no    = 220
-    protocol   = "udp"
-    action     = "allow"
-    cidr_block = var.untrusted_vpc_cidrs["streaming_scrub"]
-    from_port  = var.peering_udp_port
-    to_port    = var.peering_udp_port
-  }
-
-  # Allow HTTPS for ECR access
-  ingress {
-    rule_no    = 300
-    protocol   = "tcp"
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 443
-    to_port    = 443
-  }
-
-  # Allow ephemeral ports for return traffic
-  ingress {
-    rule_no    = 400
-    protocol   = "tcp"
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 1024
-    to_port    = 65535
-  }
-
-  # Allow UDP ephemeral ports
-  ingress {
-    rule_no    = 500
-    protocol   = "udp"
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 1024
-    to_port    = 65535
-  }
-
-  # EGRESS rules - Only to trusted streaming (NO back to untrusted)
-  egress {
-    rule_no    = 100
-    protocol   = "tcp"
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 22
-    to_port    = 22
-  }
-
-  # FIXED: SRT UDP outbound to trusted streaming host ONLY
-  dynamic "egress" {
-    for_each = { for i, port in var.srt_udp_ports : i => port }
-    content {
-      rule_no    = 200 + egress.key
-      protocol   = "udp"
-      action     = "allow"
-      cidr_block = var.trusted_vpc_cidrs["streaming"]
-      from_port  = egress.value
-      to_port    = egress.value
-    }
-  }
-
-  # FIXED: Static MediaMTX port outbound to trusted streaming ONLY
-  egress {
-    rule_no    = 220
-    protocol   = "udp"
-    action     = "allow"
-    cidr_block = var.trusted_vpc_cidrs["streaming"]
-    from_port  = var.peering_udp_port
-    to_port    = var.peering_udp_port
-  }
-
-  # Allow HTTPS outbound for ECR
-  egress {
-    rule_no    = 300
-    protocol   = "tcp"
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 443
-    to_port    = 443
-  }
-
-  # Allow ephemeral ports outbound
-  egress {
-    rule_no    = 400
-    protocol   = "tcp"
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 1024
-    to_port    = 65535
-  }
-
-  # REMOVED: No return traffic to untrusted (security requirement)
-
-  tags = {
-    Name = "${var.project_name}-trusted-scrub-app-nacl"
-  }
-
-  depends_on = [module.trusted_vpc_streaming_scrub]
-}
-
-# ADDED: Network ACL for Untrusted Scrub (ONE-WAY peering only)
-resource "aws_network_acl" "untrusted_scrub_app_nacl" {
-  provider   = aws.primary
-  vpc_id     = module.untrusted_vpc_streaming_scrub.vpc_id
-  subnet_ids = [module.untrusted_vpc_streaming_scrub.private_subnets_by_name["app"].id]
-
-  # Allow SSH inbound from untrusted VPN clients
-  ingress {
-    rule_no    = 100
-    protocol   = "tcp"
     action     = "allow"
     cidr_block = var.untrusted_vpn_client_cidr
     from_port  = 22
     to_port    = 22
   }
 
-  # Allow SSH inbound from untrusted devops VPC
+  # Inbound: Ephemeral ports for return traffic
   ingress {
-    rule_no    = 110
     protocol   = "tcp"
-    action     = "allow"
-    cidr_block = var.untrusted_vpc_cidrs["devops"]
-    from_port  = 22
-    to_port    = 22
-  }
-
-  # SRT UDP from untrusted ingress
-  dynamic "ingress" {
-    for_each = { for i, port in var.srt_udp_ports : i => port }
-    content {
-      rule_no    = 200 + ingress.key
-      protocol   = "udp"
-      action     = "allow"
-      cidr_block = var.untrusted_vpc_cidrs["streaming_ingress"]
-      from_port  = ingress.value
-      to_port    = ingress.value
-    }
-  }
-
-  # REMOVED: No return traffic from trusted (ONE-WAY only)
-
-  # Allow HTTPS for ECR access
-  ingress {
-    rule_no    = 400
-    protocol   = "tcp"
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 443
-    to_port    = 443
-  }
-
-  # Allow ephemeral ports for return traffic
-  ingress {
-    rule_no    = 500
-    protocol   = "tcp"
+    rule_no    = 120
     action     = "allow"
     cidr_block = "0.0.0.0/0"
     from_port  = 1024
     to_port    = 65535
   }
 
-  # EGRESS rules - Forward to trusted scrub ONLY (ONE-WAY)
+  # Outbound: Allow UDP 50555 to untrusted scrub
   egress {
-    rule_no    = 100
-    protocol   = "tcp"
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 22
-    to_port    = 22
-  }
-
-  # Forward traffic to trusted scrub via VPC peering (ONE-WAY)
-  dynamic "egress" {
-    for_each = { for i, port in var.srt_udp_ports : i => port }
-    content {
-      rule_no    = 200 + egress.key
-      protocol   = "udp"
-      action     = "allow"
-      cidr_block = var.trusted_vpc_cidrs["streaming_scrub"]
-      from_port  = egress.value
-      to_port    = egress.value
-    }
-  }
-
-  # Forward MediaMTX traffic to trusted scrub (ONE-WAY)
-  egress {
-    rule_no    = 220
     protocol   = "udp"
+    rule_no    = 100
     action     = "allow"
-    cidr_block = var.trusted_vpc_cidrs["streaming_scrub"]
-    from_port  = var.peering_udp_port
-    to_port    = var.peering_udp_port
+    cidr_block = var.untrusted_vpc_cidrs["streaming_scrub"]
+    from_port  = 50555
+    to_port    = 50555
   }
 
-  # Allow HTTPS outbound for ECR
+  # Outbound: Allow HTTPS for ECR/updates
   egress {
-    rule_no    = 300
     protocol   = "tcp"
+    rule_no    = 110
     action     = "allow"
     cidr_block = "0.0.0.0/0"
     from_port  = 443
     to_port    = 443
   }
 
-  # Allow ephemeral ports outbound
+  # Outbound: Ephemeral ports for return traffic
   egress {
-    rule_no    = 400
     protocol   = "tcp"
+    rule_no    = 120
     action     = "allow"
     cidr_block = "0.0.0.0/0"
     from_port  = 1024
@@ -253,8 +69,329 @@ resource "aws_network_acl" "untrusted_scrub_app_nacl" {
   }
 
   tags = {
-    Name = "${var.project_name}-untrusted-scrub-app-nacl"
+    Name = "${var.project_name}-untrusted-ingress-nacl"
+  }
+}
+
+# --- Untrusted Streaming Scrub VPC NACL ---
+resource "aws_network_acl" "untrusted_scrub_nacl" {
+  provider   = aws.primary
+  vpc_id     = module.untrusted_vpc_streaming_scrub.vpc_id
+  subnet_ids = values(module.untrusted_vpc_streaming_scrub.private_subnets_by_name)[*].id
+
+  # Inbound: Allow UDP 50555 from ingress host
+  ingress {
+    protocol   = "udp"
+    rule_no    = 100
+    action     = "allow"
+    cidr_block = var.untrusted_vpc_cidrs["streaming_ingress"]
+    from_port  = 50555
+    to_port    = 50555
   }
 
-  depends_on = [module.untrusted_vpc_streaming_scrub]
+  # Inbound: Allow SSH from VPN clients
+  ingress {
+    protocol   = "tcp"
+    rule_no    = 110
+    action     = "allow"
+    cidr_block = var.untrusted_vpn_client_cidr
+    from_port  = 22
+    to_port    = 22
+  }
+
+  # Inbound: Ephemeral ports for return traffic
+  ingress {
+    protocol   = "tcp"
+    rule_no    = 120
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 1024
+    to_port    = 65535
+  }
+
+  # Outbound: Allow UDP 50555 to trusted scrub
+  egress {
+    protocol   = "udp"
+    rule_no    = 100
+    action     = "allow"
+    cidr_block = var.trusted_vpc_cidrs["streaming_scrub"]
+    from_port  = 50555
+    to_port    = 50555
+  }
+
+  # Outbound: Allow HTTPS for ECR/updates
+  egress {
+    protocol   = "tcp"
+    rule_no    = 110
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 443
+    to_port    = 443
+  }
+
+  # Outbound: Ephemeral ports for return traffic
+  egress {
+    protocol   = "tcp"
+    rule_no    = 120
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 1024
+    to_port    = 65535
+  }
+
+  tags = {
+    Name = "${var.project_name}-untrusted-scrub-nacl"
+  }
+}
+
+# --- Untrusted DevOps VPC NACL ---
+resource "aws_network_acl" "untrusted_devops_nacl" {
+  provider   = aws.primary
+  vpc_id     = module.untrusted_vpc_devops.vpc_id
+  subnet_ids = values(module.untrusted_vpc_devops.public_subnets_by_name)[*].id
+
+  # Inbound: Allow SSH from VPN clients
+  ingress {
+    protocol   = "tcp"
+    rule_no    = 100
+    action     = "allow"
+    cidr_block = var.untrusted_vpn_client_cidr
+    from_port  = 22
+    to_port    = 22
+  }
+
+  # Inbound: Ephemeral ports for return traffic
+  ingress {
+    protocol   = "tcp"
+    rule_no    = 110
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 1024
+    to_port    = 65535
+  }
+
+  # Outbound: Allow HTTPS for ECR/updates
+  egress {
+    protocol   = "tcp"
+    rule_no    = 100
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 443
+    to_port    = 443
+  }
+
+  # Outbound: Ephemeral ports for return traffic
+  egress {
+    protocol   = "tcp"
+    rule_no    = 110
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 1024
+    to_port    = 65535
+  }
+
+  tags = {
+    Name = "${var.project_name}-untrusted-devops-nacl"
+  }
+}
+
+# --- Trusted Streaming Scrub VPC NACL ---
+resource "aws_network_acl" "trusted_scrub_nacl" {
+  provider   = aws.primary
+  vpc_id     = module.trusted_vpc_streaming_scrub.vpc_id
+  subnet_ids = values(module.trusted_vpc_streaming_scrub.private_subnets_by_name)[*].id
+
+  # Inbound: Allow UDP 50555 from untrusted scrub
+  ingress {
+    protocol   = "udp"
+    rule_no    = 100
+    action     = "allow"
+    cidr_block = var.untrusted_vpc_cidrs["streaming_scrub"]
+    from_port  = 50555
+    to_port    = 50555
+  }
+
+  # Inbound: Allow SSH from VPN clients
+  ingress {
+    protocol   = "tcp"
+    rule_no    = 110
+    action     = "allow"
+    cidr_block = var.trusted_vpn_client_cidr
+    from_port  = 22
+    to_port    = 22
+  }
+
+  # Inbound: Ephemeral ports for return traffic
+  ingress {
+    protocol   = "tcp"
+    rule_no    = 120
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 1024
+    to_port    = 65535
+  }
+
+  # Outbound: Allow UDP 50555 to trusted streaming
+  egress {
+    protocol   = "udp"
+    rule_no    = 100
+    action     = "allow"
+    cidr_block = var.trusted_vpc_cidrs["streaming"]
+    from_port  = 50555
+    to_port    = 50555
+  }
+
+  # Outbound: Allow HTTPS for ECR/updates
+  egress {
+    protocol   = "tcp"
+    rule_no    = 110
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 443
+    to_port    = 443
+  }
+
+  # Outbound: Ephemeral ports for return traffic
+  egress {
+    protocol   = "tcp"
+    rule_no    = 120
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 1024
+    to_port    = 65535
+  }
+
+  tags = {
+    Name = "${var.project_name}-trusted-scrub-nacl"
+  }
+}
+
+# --- Trusted Streaming VPC NACL ---
+resource "aws_network_acl" "trusted_streaming_nacl" {
+  provider   = aws.primary
+  vpc_id     = module.trusted_vpc_streaming.vpc_id
+  subnet_ids = values(module.trusted_vpc_streaming.private_subnets_by_name)[*].id
+
+  # Inbound: Allow UDP 50555 from trusted scrub
+  ingress {
+    protocol   = "udp"
+    rule_no    = 100
+    action     = "allow"
+    cidr_block = var.trusted_vpc_cidrs["streaming_scrub"]
+    from_port  = 50555
+    to_port    = 50555
+  }
+
+  # Inbound: Allow SSH from VPN clients
+  ingress {
+    protocol   = "tcp"
+    rule_no    = 110
+    action     = "allow"
+    cidr_block = var.trusted_vpn_client_cidr
+    from_port  = 22
+    to_port    = 22
+  }
+
+  # Inbound: Ephemeral ports for return traffic
+  ingress {
+    protocol   = "tcp"
+    rule_no    = 120
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 1024
+    to_port    = 65535
+  }
+
+  # Outbound: Allow HTTPS for ECR/updates
+  egress {
+    protocol   = "tcp"
+    rule_no    = 100
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 443
+    to_port    = 443
+  }
+
+  # Outbound: Ephemeral ports for return traffic
+  egress {
+    protocol   = "tcp"
+    rule_no    = 110
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 1024
+    to_port    = 65535
+  }
+
+  tags = {
+    Name = "${var.project_name}-trusted-streaming-nacl"
+  }
+}
+
+# --- Trusted DevOps VPC NACL ---
+resource "aws_network_acl" "trusted_devops_nacl" {
+  provider   = aws.primary
+  vpc_id     = module.trusted_vpc_devops.vpc_id
+  subnet_ids = values(module.trusted_vpc_devops.public_subnets_by_name)[*].id
+
+  # Inbound: Allow SSH from VPN clients
+  ingress {
+    protocol   = "tcp"
+    rule_no    = 100
+    action     = "allow"
+    cidr_block = var.trusted_vpn_client_cidr
+    from_port  = 22
+    to_port    = 22
+  }
+
+  # Inbound: Ephemeral ports for return traffic
+  ingress {
+    protocol   = "tcp"
+    rule_no    = 110
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 1024
+    to_port    = 65535
+  }
+
+  # Outbound: Allow HTTPS for ECR/updates
+  egress {
+    protocol   = "tcp"
+    rule_no    = 100
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 443
+    to_port    = 443
+  }
+
+  # Outbound: Ephemeral ports for return traffic
+  egress {
+    protocol   = "tcp"
+    rule_no    = 110
+    action     = "allow"
+    cidr_block = "0.0.0.0/0"
+    from_port  = 1024
+    to_port    = 65535
+  }
+
+  tags = {
+    Name = "${var.project_name}-trusted-devops-nacl"
+  }
+}
+
+resource "aws_vpc_peering_connection" "untrusted_to_trusted_scrub" {
+  provider    = aws.primary
+  vpc_id      = module.untrusted_vpc_streaming_scrub.vpc_id
+  peer_vpc_id = module.trusted_vpc_streaming_scrub.vpc_id
+  auto_accept = true
+
+  tags = {
+    Name = "${var.project_name}-untrusted-to-trusted-scrub"
+  }
+}
+
+resource "aws_route" "untrusted_to_trusted" {
+  provider                  = aws.primary
+  route_table_id            = module.untrusted_vpc_streaming_scrub.private_route_table_ids[0]
+  destination_cidr_block    = var.trusted_vpc_cidrs["streaming_scrub"]
+  vpc_peering_connection_id = aws_vpc_peering_connection.untrusted_to_trusted_scrub.id
 }

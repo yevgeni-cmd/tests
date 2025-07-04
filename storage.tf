@@ -1,183 +1,173 @@
-################################################################################
-# Storage & Container Registry - S3 Buckets and ECR Repositories
-################################################################################
+# =================================================================
+# ECR (Elastic Container Registry) Repositories
+# Defines private Docker image repositories for each service
+# =================================================================
 
-# --- ECR Repositories ---
+# --- Untrusted Environment Repositories ---
 
-# ECR Repository for Untrusted DevOps images
-module "untrusted_ecr" {
-  source          = "./modules/ecr_repository"
-  providers       = { aws = aws.primary }
-  repository_name = "${var.project_name}/untrusted-devops-images"
+resource "aws_ecr_repository" "untrusted_images" {
+  name                 = "poc/untrusted-devops-images"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = {
+    Environment = "Untrusted"
+    Project     = "PoC"
+  }
 }
 
-# ECR Repository for Trusted DevOps images
-module "trusted_ecr_devops" {
-  source          = "./modules/ecr_repository"
-  providers       = { aws = aws.primary }
-  repository_name = "${var.project_name}/trusted-devops-images"
+# --- Trusted Environment Repositories ---
+
+resource "aws_ecr_repository" "trusted_devops_images" {
+  name                 = "poc/trusted-devops-images"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = {
+    Environment = "Trusted"
+    Project     = "PoC"
+  }
 }
 
-# ECR Repository for Trusted Streaming images
-module "trusted_ecr_streaming" {
-  source          = "./modules/ecr_repository"
-  providers       = { aws = aws.primary }
-  repository_name = "${var.project_name}/trusted-streaming-images"
+resource "aws_ecr_repository" "trusted_streaming_images" {
+  name                 = "poc/trusted-streaming-images"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = {
+    Environment = "Trusted"
+    Project     = "PoC"
+  }
 }
 
-# ECR Repository for Trusted IoT ECS services
-module "trusted_ecr_iot" {
-  source          = "./modules/ecr_repository"
-  providers       = { aws = aws.primary }
-  repository_name = "${var.project_name}/trusted-iot-services"
+resource "aws_ecr_repository" "trusted_iot_images" {
+  name                 = "poc/trusted-iot-services"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = {
+    Environment = "Trusted"
+    Project     = "PoC"
+  }
 }
 
-# --- S3 Buckets ---
 
-# S3 Bucket for Untrusted Ingress Data
-module "untrusted_s3_ingress" {
-  source      = "./modules/s3_bucket"
-  providers   = { aws = aws.primary }
-  bucket_name = "${var.project_name}-untrusted-ingress-data-${data.aws_caller_identity.current.account_id}"
+# =================================================================
+# ECR Repository Policies
+# Grants specific IAM roles access to push/pull images
+# =================================================================
+
+# --- FIXED: Untrusted DevOps Policy ---
+data "aws_iam_policy_document" "untrusted_policy_doc" {
+  statement {
+    sid    = "AllowDevOpsHost"
+    effect = "Allow"
+    principals {
+      type        = "AWS"
+      # FIXED: This now correctly references the 'iam_role_arn' output
+      # that you are adding to the ec2_instance module.
+      identifiers = [module.untrusted_devops_host.iam_role_arn]
+    }
+    actions = [
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:BatchGetImage",
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:PutImage",
+      "ecr:InitiateLayerUpload",
+      "ecr:UploadLayerPart",
+      "ecr:CompleteLayerUpload"
+    ]
+  }
 }
 
-# S3 Bucket for Trusted Environment - General Application Data
-module "trusted_s3_app" {
-  source      = "./modules/s3_bucket"
-  providers   = { aws = aws.primary }
-  bucket_name = "${var.project_name}-trusted-app-data-${data.aws_caller_identity.current.account_id}"
-}
-
-# S3 Bucket for Trusted Streaming Data (VOD Platform)
-module "trusted_s3_streaming" {
-  source      = "./modules/s3_bucket"
-  providers   = { aws = aws.primary }
-  bucket_name = "${var.project_name}-trusted-streaming-data-${data.aws_caller_identity.current.account_id}"
-}
-
-# S3 Bucket for Trusted IoT Management Data
-module "trusted_s3_iot" {
-  source      = "./modules/s3_bucket"
-  providers   = { aws = aws.primary }
-  bucket_name = "${var.project_name}-trusted-iot-data-${data.aws_caller_identity.current.account_id}"
-}
-
-# ECR Policy for Untrusted Environment - Only untrusted instances can access
 resource "aws_ecr_repository_policy" "untrusted_policy" {
-  repository = module.untrusted_ecr.repository_url
-  
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "AllowUntrustedInstancesOnly"
-        Effect = "Allow"
-        Principal = {
-          AWS = [
-            "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.project_name}-untrusted-*"
-          ]
-        }
-        Action = [
-          "ecr:GetAuthorizationToken",
-          "ecr:BatchCheckLayerAvailability",
-          "ecr:GetDownloadUrlForLayer",
-          "ecr:BatchGetImage",
-          "ecr:PutImage",
-          "ecr:InitiateLayerUpload",
-          "ecr:UploadLayerPart",
-          "ecr:CompleteLayerUpload"
-        ]
-      }
-    ]
-  })
+  repository = aws_ecr_repository.untrusted_images.name
+  policy     = data.aws_iam_policy_document.untrusted_policy_doc.json
 }
 
-# ECR Policy for Trusted DevOps - Only trusted instances can access
+
+# --- FIXED: Trusted DevOps Policy ---
+data "aws_iam_policy_document" "trusted_devops_policy_doc" {
+  statement {
+    sid    = "AllowDevOpsHost"
+    effect = "Allow"
+    principals {
+      type        = "AWS"
+      identifiers = [module.trusted_devops_host.iam_role_arn]
+    }
+    actions = [
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:BatchGetImage",
+      "ecr:BatchCheckLayerAvailability",
+      "ecr:PutImage",
+      "ecr:InitiateLayerUpload",
+      "ecr:UploadLayerPart",
+      "ecr:CompleteLayerUpload"
+    ]
+  }
+}
+
 resource "aws_ecr_repository_policy" "trusted_devops_policy" {
-  repository = module.trusted_ecr_devops.repository_url
-  
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "AllowTrustedInstancesOnly"
-        Effect = "Allow"
-        Principal = {
-          AWS = [
-            "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.project_name}-trusted-*"
-          ]
-        }
-        Action = [
-          "ecr:GetAuthorizationToken",
-          "ecr:BatchCheckLayerAvailability",
-          "ecr:GetDownloadUrlForLayer",
-          "ecr:BatchGetImage",
-          "ecr:PutImage",
-          "ecr:InitiateLayerUpload",
-          "ecr:UploadLayerPart",
-          "ecr:CompleteLayerUpload"
-        ]
-      }
-    ]
-  })
+  repository = aws_ecr_repository.trusted_devops_images.name
+  policy     = data.aws_iam_policy_document.trusted_devops_policy_doc.json
 }
 
-# ECR Policy for Trusted Streaming - Only trusted instances can access
+
+# --- FIXED: Trusted Streaming Policy ---
+data "aws_iam_policy_document" "trusted_streaming_policy_doc" {
+  statement {
+    sid    = "AllowStreamingHost"
+    effect = "Allow"
+    principals {
+      type        = "AWS"
+      # Granting access to the trusted devops host to deploy to streaming
+      identifiers = [module.trusted_devops_host.iam_role_arn]
+    }
+    actions = [
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:BatchGetImage",
+      "ecr:BatchCheckLayerAvailability"
+    ]
+  }
+}
+
 resource "aws_ecr_repository_policy" "trusted_streaming_policy" {
-  repository = module.trusted_ecr_streaming.repository_url
-  
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "AllowTrustedInstancesOnly"
-        Effect = "Allow"
-        Principal = {
-          AWS = [
-            "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.project_name}-trusted-*"
-          ]
-        }
-        Action = [
-          "ecr:GetAuthorizationToken",
-          "ecr:BatchCheckLayerAvailability",
-          "ecr:GetDownloadUrlForLayer",
-          "ecr:BatchGetImage",
-          "ecr:PutImage",
-          "ecr:InitiateLayerUpload",
-          "ecr:UploadLayerPart",
-          "ecr:CompleteLayerUpload"
-        ]
-      }
-    ]
-  })
+  repository = aws_ecr_repository.trusted_streaming_images.name
+  policy     = data.aws_iam_policy_document.trusted_streaming_policy_doc.json
 }
 
-# ECR Policy for Trusted IoT - Only trusted instances can access
-resource "aws_ecr_repository_policy" "trusted_iot_policy" {
-  repository = module.trusted_ecr_iot.repository_url
-  
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "AllowTrustedInstancesOnly"
-        Effect = "Allow"
-        Principal = {
-          AWS = [
-            "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.project_name}-trusted-*"
-          ]
-        }
-        Action = [
-          "ecr:GetAuthorizationToken",
-          "ecr:BatchCheckLayerAvailability",
-          "ecr:GetDownloadUrlForLayer",
-          "ecr:BatchGetImage",
-          "ecr:PutImage",
-          "ecr:InitiateLayerUpload",
-          "ecr:UploadLayerPart",
-          "ecr:CompleteLayerUpload"
-        ]
-      }
+
+# --- FIXED: Trusted IoT Policy ---
+data "aws_iam_policy_document" "trusted_iot_policy_doc" {
+  statement {
+    sid    = "AllowIoTHost"
+    effect = "Allow"
+    principals {
+      type        = "AWS"
+      # Granting access to the trusted devops host to deploy to IoT
+      identifiers = [module.trusted_devops_host.iam_role_arn]
+    }
+    actions = [
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:BatchGetImage",
+      "ecr:BatchCheckLayerAvailability"
     ]
-  })
+  }
+}
+
+resource "aws_ecr_repository_policy" "trusted_iot_policy" {
+  repository = aws_ecr_repository.trusted_iot_images.name
+  policy     = data.aws_iam_policy_document.trusted_iot_policy_doc.json
 }

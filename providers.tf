@@ -7,18 +7,19 @@ terraform {
   }
 }
 
-# Primary AWS Provider with your profile
 provider "aws" {
   alias   = "primary"
-  region  = "il-central-1"
-  profile = "728951503198_SystemAdministrator-8H"
+  profile = var.aws_profile
+  region  = var.primary_region
 }
 
-# Default provider (same as primary)
 provider "aws" {
-  region  = "il-central-1"
-  profile = "728951503198_SystemAdministrator-8H"
+  alias   = "remote"
+  profile = var.aws_profile
+  region  = var.remote_region
 }
 
 # Data source for current AWS account ID
 data "aws_caller_identity" "current" {}
+
+

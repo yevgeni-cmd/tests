@@ -63,3 +63,9 @@ variable "dns_servers" {
   type        = list(string)
   default     = []
 }
+
+variable "project_name" {
+  description = "A name for the project to prefix resources."
+  type        = string
+  default     = "final-arch"
+}
