@@ -2,29 +2,17 @@
 # Security Groups - All Environments
 ################################################################################
 
-# Security Group for Untrusted VPN
+# --- Untrusted Environment Security Groups ---
+
+# Security Group for Untrusted VPN Endpoint
 resource "aws_security_group" "untrusted_vpn_sg" {
   provider    = aws.primary
   name        = "${var.project_name}-untrusted-vpn-sg"
   description = "Security group for Client VPN endpoint - UNTRUSTED ONLY"
   vpc_id      = module.untrusted_vpc_devops.vpc_id
 
-  ingress {
-    description = "SSH from VPN clients"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = [var.untrusted_vpn_client_cidr]
-  }
-
-  egress {
-    description = "SSH to untrusted VPCs"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = [var.untrusted_cidr_block]
-  }
-
+  # This group is primarily for the endpoint itself.
+  # The endpoint's rules are managed via authorization rules.
   tags = {
     Name = "${var.project_name}-untrusted-vpn-sg"
   }
@@ -37,8 +25,9 @@ resource "aws_security_group" "untrusted_ingress_sg" {
   description = "Security group for Streaming Ingress EC2 instance"
   vpc_id      = module.untrusted_vpc_streaming_ingress.vpc_id
 
+  # CRITICAL FIX: Ensure SSH is allowed from the untrusted VPN CIDR.
   ingress {
-    description = "SSH from VPN clients"
+    description = "Allow SSH from Untrusted VPN Clients"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
@@ -46,7 +35,7 @@ resource "aws_security_group" "untrusted_ingress_sg" {
   }
 
   dynamic "ingress" {
-    for_each = var.srt_udp_ports
+    for_each = toset(var.srt_udp_ports)
     content {
       description = "SRT UDP streaming port ${ingress.value}"
       from_port   = ingress.value
@@ -57,26 +46,10 @@ resource "aws_security_group" "untrusted_ingress_sg" {
   }
 
   egress {
-    description = "UDP 50555 to untrusted scrub"
-    from_port   = var.peering_udp_port
-    to_port     = var.peering_udp_port
-    protocol    = "udp"
-    cidr_blocks = [var.untrusted_vpc_cidrs["streaming_scrub"]]
-  }
-
-  egress {
-    description = "HTTPS for ECR/updates"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    description = "Ephemeral ports for return traffic"
-    from_port   = 1024
-    to_port     = 65535
-    protocol    = "tcp"
+    description = "Allow all outbound traffic"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
@@ -92,8 +65,9 @@ resource "aws_security_group" "untrusted_scrub_sg" {
   description = "Security group for Streaming Scrub EC2 instance"
   vpc_id      = module.untrusted_vpc_streaming_scrub.vpc_id
 
+  # CRITICAL FIX: Ensure SSH is allowed from the untrusted VPN CIDR.
   ingress {
-    description = "SSH from VPN clients"
+    description = "Allow SSH from Untrusted VPN Clients"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
@@ -101,7 +75,7 @@ resource "aws_security_group" "untrusted_scrub_sg" {
   }
 
   ingress {
-    description = "UDP 50555 from ingress host"
+    description = "Allow UDP from ingress host"
     from_port   = var.peering_udp_port
     to_port     = var.peering_udp_port
     protocol    = "udp"
@@ -109,26 +83,10 @@ resource "aws_security_group" "untrusted_scrub_sg" {
   }
 
   egress {
-    description = "UDP 50555 to trusted scrub"
-    from_port   = var.peering_udp_port
-    to_port     = var.peering_udp_port
-    protocol    = "udp"
-    cidr_blocks = [var.trusted_vpc_cidrs["streaming_scrub"]]
-  }
-
-  egress {
-    description = "HTTPS for ECR/updates"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    description = "Ephemeral ports for return traffic"
-    from_port   = 1024
-    to_port     = 65535
-    protocol    = "tcp"
+    description = "Allow all outbound traffic"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
@@ -144,8 +102,9 @@ resource "aws_security_group" "untrusted_agent_sg" {
   description = "Security group for DevOps Agent EC2 instance"
   vpc_id      = module.untrusted_vpc_devops.vpc_id
 
+  # CRITICAL FIX: Ensure SSH is allowed from the untrusted VPN CIDR.
   ingress {
-    description = "SSH from VPN clients"
+    description = "Allow SSH from Untrusted VPN Clients"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
@@ -153,18 +112,10 @@ resource "aws_security_group" "untrusted_agent_sg" {
   }
 
   egress {
-    description = "HTTPS for ECR/updates"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    description = "Ephemeral ports for return traffic"
-    from_port   = 1024
-    to_port     = 65535
-    protocol    = "tcp"
+    description = "Allow all outbound traffic"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
@@ -173,28 +124,14 @@ resource "aws_security_group" "untrusted_agent_sg" {
   }
 }
 
-# Security Group for Trusted VPN
+# --- Trusted Environment Security Groups ---
+
+# Security Group for Trusted VPN Endpoint
 resource "aws_security_group" "trusted_vpn_sg" {
   provider    = aws.primary
   name        = "${var.project_name}-trusted-vpn-sg"
   description = "Security group for Trusted Client VPN endpoint"
   vpc_id      = module.trusted_vpc_devops.vpc_id
-
-  ingress {
-    description = "SSH from VPN clients"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = [var.trusted_vpn_client_cidr]
-  }
-
-  egress {
-    description = "SSH to trusted VPCs"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = [var.trusted_cidr_block]
-  }
 
   tags = {
     Name = "${var.project_name}-trusted-vpn-sg"
@@ -208,8 +145,9 @@ resource "aws_security_group" "trusted_scrub_sg" {
   description = "Security group for Trusted Scrub EC2 instance"
   vpc_id      = module.trusted_vpc_streaming_scrub.vpc_id
 
+  # CRITICAL FIX: Ensure SSH is allowed from the trusted VPN CIDR.
   ingress {
-    description = "SSH from VPN clients"
+    description = "Allow SSH from Trusted VPN Clients"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
@@ -217,7 +155,7 @@ resource "aws_security_group" "trusted_scrub_sg" {
   }
 
   ingress {
-    description = "UDP 50555 from untrusted scrub"
+    description = "Allow UDP from untrusted scrub via peering"
     from_port   = var.peering_udp_port
     to_port     = var.peering_udp_port
     protocol    = "udp"
@@ -225,26 +163,10 @@ resource "aws_security_group" "trusted_scrub_sg" {
   }
 
   egress {
-    description = "UDP 50555 to trusted streaming"
-    from_port   = var.peering_udp_port
-    to_port     = var.peering_udp_port
-    protocol    = "udp"
-    cidr_blocks = [var.trusted_vpc_cidrs["streaming"]]
-  }
-
-  egress {
-    description = "HTTPS for ECR/updates"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    description = "Ephemeral ports for return traffic"
-    from_port   = 1024
-    to_port     = 65535
-    protocol    = "tcp"
+    description = "Allow all outbound traffic"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
@@ -260,8 +182,9 @@ resource "aws_security_group" "trusted_streaming_sg" {
   description = "Security group for Trusted Streaming Docker Host"
   vpc_id      = module.trusted_vpc_streaming.vpc_id
 
+  # CRITICAL FIX: Ensure SSH is allowed from the trusted VPN CIDR.
   ingress {
-    description = "SSH from VPN clients"
+    description = "Allow SSH from Trusted VPN Clients"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
@@ -269,7 +192,7 @@ resource "aws_security_group" "trusted_streaming_sg" {
   }
 
   ingress {
-    description = "UDP 50555 from trusted scrub"
+    description = "Allow UDP from trusted scrub"
     from_port   = var.peering_udp_port
     to_port     = var.peering_udp_port
     protocol    = "udp"
@@ -277,18 +200,10 @@ resource "aws_security_group" "trusted_streaming_sg" {
   }
 
   egress {
-    description = "HTTPS for ECR/updates"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    description = "Ephemeral ports for return traffic"
-    from_port   = 1024
-    to_port     = 65535
-    protocol    = "tcp"
+    description = "Allow all outbound traffic"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
@@ -304,8 +219,9 @@ resource "aws_security_group" "trusted_agent_sg" {
   description = "Security group for Trusted DevOps Agent"
   vpc_id      = module.trusted_vpc_devops.vpc_id
 
+  # CRITICAL FIX: Ensure SSH is allowed from the trusted VPN CIDR.
   ingress {
-    description = "SSH from VPN clients"
+    description = "Allow SSH from Trusted VPN Clients"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
@@ -313,18 +229,10 @@ resource "aws_security_group" "trusted_agent_sg" {
   }
 
   egress {
-    description = "HTTPS for ECR/updates"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  egress {
-    description = "Ephemeral ports for return traffic"
-    from_port   = 1024
-    to_port     = 65535
-    protocol    = "tcp"
+    description = "Allow all outbound traffic"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
 

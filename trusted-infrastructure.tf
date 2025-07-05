@@ -93,7 +93,7 @@ module "trusted_scrub_host" {
   allowed_udp_cidrs = [var.untrusted_vpc_cidrs["streaming_scrub"]]
   allowed_egress_udp_ports = [var.peering_udp_port]
   allowed_egress_udp_cidrs = [var.trusted_vpc_cidrs["streaming"]]
-  user_data = templatefile("${path.module}/templates/traffic-forward-userdata.sh", {
+  user_data = templatefile("${path.module}/templates/ecr-auto-login-userdata.sh", {
     trusted_scrub_vpc_cidr = var.trusted_vpc_cidrs["streaming_scrub"]
     aws_region            = var.primary_region
     ecr_registry_url      = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.primary_region}.amazonaws.com"
