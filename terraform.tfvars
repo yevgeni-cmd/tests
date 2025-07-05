@@ -20,7 +20,7 @@ untrusted_vpn_server_cert_arn = "arn:aws:acm:il-central-1:728951503198:certifica
 # Use custom AMIs for EC2 instances
 # Set to true to enable custom AMIs
 # If false, default AMIs will be used based on the instance_os variable
-use_custom_amis = false
+use_custom_amis = true
 # Custom AMI IDs (replace with your actual AMI IDs)
 custom_standard_ami_id = "ami-0ea2fce7f7afb4f4c"
 

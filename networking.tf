@@ -226,21 +226,21 @@ resource "aws_network_acl" "scrub_app_nacl" {
   # Allow ephemeral ports for return traffic
   ingress {
     rule_no    = 400
-    protocol   = "tcp"
+    protocol   = "-1"
     action     = "allow"
     cidr_block = "0.0.0.0/0"
-    from_port  = 1024
-    to_port    = 65535
+    from_port  = 0
+    to_port    = 0
   }
 
   # Allow UDP ephemeral ports
   ingress {
     rule_no    = 500
-    protocol   = "udp"
+    protocol   = "-1"
     action     = "allow"
     cidr_block = "0.0.0.0/0"
-    from_port  = 1024
-    to_port    = 65535
+    from_port  = 0
+    to_port    = 0
   }
 
   # Allow SSH outbound
@@ -279,11 +279,20 @@ resource "aws_network_acl" "scrub_app_nacl" {
   # Allow ephemeral ports outbound
   egress {
     rule_no    = 400
-    protocol   = "tcp"
+    protocol   = "-1"
     action     = "allow"
     cidr_block = "0.0.0.0/0"
-    from_port  = 1024
-    to_port    = 65535
+    from_port  = 0
+    to_port    = 0
+  }
+    # Allow SSH inbound from VPN subnet
+  ingress {
+    rule_no    = 110
+    protocol   = "tcp"
+    action     = "allow"
+    cidr_block = module.untrusted_vpc_devops.private_subnets_by_name["vpn"].cidr_block
+    from_port  = 22
+    to_port    = 22
   }
 
   tags = {
@@ -333,21 +342,21 @@ resource "aws_network_acl" "trusted_scrub_app_nacl" {
   # Allow ephemeral ports for return traffic
   ingress {
     rule_no    = 400
-    protocol   = "tcp"
+    protocol   = "-1"
     action     = "allow"
     cidr_block = "0.0.0.0/0"
-    from_port  = 1024
-    to_port    = 65535
+    from_port  = 0
+    to_port    = 0
   }
 
   # Allow UDP ephemeral ports
   ingress {
     rule_no    = 500
-    protocol   = "udp"
+    protocol   = "-1"
     action     = "allow"
     cidr_block = "0.0.0.0/0"
-    from_port  = 1024
-    to_port    = 65535
+    from_port  = 0
+    to_port    = 0
   }
 
   # Allow SSH outbound
@@ -386,14 +395,45 @@ resource "aws_network_acl" "trusted_scrub_app_nacl" {
   # Allow ephemeral ports outbound
   egress {
     rule_no    = 400
-    protocol   = "tcp"
+    protocol   = "-1"
     action     = "allow"
     cidr_block = "0.0.0.0/0"
-    from_port  = 1024
-    to_port    = 65535
+    from_port  = 0
+    to_port    = 0
   }
 
   tags = {
     Name = "${var.project_name}-trusted-scrub-app-nacl"
   }
+}
+
+# --- Add return routes in spoke VPCs for untrusted VPN pool
+resource "aws_route" "untrusted_spoke_return_path" {
+  for_each = toset(
+    concat(
+      module.untrusted_vpc_streaming_ingress.private_route_table_ids,
+      module.untrusted_vpc_streaming_scrub.private_route_table_ids,
+      module.untrusted_vpc_devops.private_route_table_ids
+    )
+  )
+
+  route_table_id         = each.value
+  destination_cidr_block = var.untrusted_vpn_client_cidr
+  transit_gateway_id     = module.untrusted_tgw.tgw_id
+}
+
+# --- Add return routes in spoke VPCs for trusted VPN pool
+resource "aws_route" "trusted_spoke_return_path" {
+  for_each = toset(
+    concat(
+      module.trusted_vpc_streaming_scrub.private_route_table_ids,
+      module.trusted_vpc_streaming.private_route_table_ids,
+      module.trusted_vpc_jacob.private_route_table_ids,
+      module.trusted_vpc_devops.private_route_table_ids
+    )
+  )
+
+  route_table_id         = each.value
+  destination_cidr_block = var.trusted_vpn_client_cidr
+  transit_gateway_id     = module.trusted_tgw.tgw_id
 }

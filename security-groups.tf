@@ -1,124 +1,92 @@
 ################################################################################
-# CORRECTED: Security Groups for AWS Client VPN NAT Behavior
+# Security Groups - Trusted & Untrusted (VPN-aware + Internet + Isolation)
 ################################################################################
 
-# --- Untrusted Environment ---
-
-# Security Group for Untrusted VPN Endpoint
+# --- Untrusted VPN SG ---
 resource "aws_security_group" "untrusted_vpn_sg" {
   provider    = aws.primary
   name        = "${var.project_name}-untrusted-vpn-sg"
-  description = "Security group for Client VPN endpoint - UNTRUSTED ONLY"
+  description = "Client VPN endpoint - Untrusted"
   vpc_id      = module.untrusted_vpc_devops.vpc_id
 
-  # AWS Client VPN handles connections internally - no ingress rules needed
-  egress {
-    description = "All outbound traffic for VPN routing"
+  ingress {
+    description = "Allow from all untrusted VPCs"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = values(var.untrusted_vpc_cidrs)
+  }
+
+  ingress {
+    description = "Allow ONLY untrusted VPN clients"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = [var.untrusted_vpn_client_cidr]
+  }
+
+  egress {
+    description = "Outbound to untrusted VPCs"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = values(var.untrusted_vpc_cidrs)
   }
 
   tags = { Name = "${var.project_name}-untrusted-vpn-sg" }
 }
 
-# Security Group for Untrusted Streaming Ingress Host
-resource "aws_security_group" "untrusted_ingress_sg" {
+# --- Trusted VPN SG ---
+resource "aws_security_group" "trusted_vpn_sg" {
   provider    = aws.primary
-  name        = "${var.project_name}-untrusted-ingress-sg"
-  description = "Security group for Streaming Ingress EC2 instance"
-  vpc_id      = module.untrusted_vpc_streaming_ingress.vpc_id
+  name        = "${var.project_name}-trusted-vpn-sg"
+  description = "Client VPN endpoint - Trusted"
+  vpc_id      = module.trusted_vpc_devops.vpc_id
 
-  # SSH from VPN clients (not VPN subnet)
   ingress {
-    description = "SSH from Untrusted VPN Clients"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = [var.untrusted_vpn_client_cidr]  # 172.31.0.0/22
-  }
-
-  # UDP streaming ports from internet
-  dynamic "ingress" {
-    for_each = toset(var.srt_udp_ports)
-    content {
-      description = "SRT UDP streaming port ${ingress.value}"
-      from_port   = ingress.value
-      to_port     = ingress.value
-      protocol    = "udp"
-      cidr_blocks = ["0.0.0.0/0"]
-    }
-  }
-
-  # Allow all outbound traffic (internet access)
-  egress {
-    description = "Allow all outbound traffic"
+    description = "Allow from all trusted VPCs"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = values(var.trusted_vpc_cidrs)
   }
 
-  tags = { Name = "${var.project_name}-untrusted-ingress-sg" }
-}
-
-# Security Group for Untrusted Streaming Scrub Host
-resource "aws_security_group" "untrusted_scrub_sg" {
-  provider    = aws.primary
-  name        = "${var.project_name}-untrusted-scrub-sg"
-  description = "Security group for Streaming Scrub EC2 instance"
-  vpc_id      = module.untrusted_vpc_streaming_scrub.vpc_id
-
-  # SSH from VPN clients (not VPN subnet)
   ingress {
-    description = "SSH from Untrusted VPN Clients"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = [var.untrusted_vpn_client_cidr]  # 172.31.0.0/22
-  }
-
-  # UDP from ingress host
-  ingress {
-    description = "UDP from ingress host"
-    from_port   = var.peering_udp_port
-    to_port     = var.peering_udp_port
-    protocol    = "udp"
-    cidr_blocks = [var.untrusted_vpc_cidrs["streaming_ingress"]]
-  }
-
-  # Allow all outbound traffic
-  egress {
-    description = "Allow all outbound traffic"
+    description = "Allow ONLY trusted VPN clients"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.trusted_vpn_client_cidr]
   }
 
-  tags = { Name = "${var.project_name}-untrusted-scrub-sg" }
+  egress {
+    description = "Outbound to trusted VPCs"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = values(var.trusted_vpc_cidrs)
+  }
+
+  tags = { Name = "${var.project_name}-trusted-vpn-sg" }
 }
 
-# Security Group for Untrusted DevOps Agent
+# --- DevOps Agent SGs ---
 resource "aws_security_group" "untrusted_agent_sg" {
-  provider    = aws.primary
-  name        = "${var.project_name}-untrusted-agent-sg"
-  description = "Security group for DevOps Agent EC2 instance - CI/CD only"
-  vpc_id      = module.untrusted_vpc_devops.vpc_id
+  provider = aws.primary
+  name     = "${var.project_name}-untrusted-agent-sg"
+  description = "Untrusted DevOps Agent"
+  vpc_id   = module.untrusted_vpc_devops.vpc_id
 
-  # SSH from VPN clients (not VPN subnet)
   ingress {
-    description = "SSH from Untrusted VPN Clients"
+    description = "SSH from VPN"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = [var.untrusted_vpn_client_cidr]  # 172.31.0.0/22
+    cidr_blocks = [var.untrusted_vpn_client_cidr]
   }
 
-  # Allow all outbound traffic (internet access for CI/CD)
   egress {
-    description = "All outbound traffic for CI/CD"
+    description = "Internet access"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -128,55 +96,131 @@ resource "aws_security_group" "untrusted_agent_sg" {
   tags = { Name = "${var.project_name}-untrusted-agent-sg" }
 }
 
-# --- Trusted Environment ---
+resource "aws_security_group" "trusted_agent_sg" {
+  provider = aws.primary
+  name     = "${var.project_name}-trusted-agent-sg"
+  description = "Trusted DevOps Agent"
+  vpc_id   = module.trusted_vpc_devops.vpc_id
 
-# Security Group for Trusted VPN Endpoint
-resource "aws_security_group" "trusted_vpn_sg" {
-  provider    = aws.primary
-  name        = "${var.project_name}-trusted-vpn-sg"
-  description = "Security group for Trusted Client VPN endpoint"
-  vpc_id      = module.trusted_vpc_devops.vpc_id
+  ingress {
+    description = "SSH from VPN"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = [var.trusted_vpn_client_cidr]
+  }
 
-  # AWS Client VPN handles connections internally - no ingress rules needed
   egress {
-    description = "All outbound traffic for VPN routing"
+    description = "Internet access"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags = { Name = "${var.project_name}-trusted-vpn-sg" }
+  tags = { Name = "${var.project_name}-trusted-agent-sg" }
 }
 
-# Security Group for Trusted Scrub Host
-resource "aws_security_group" "trusted_scrub_sg" {
-  provider    = aws.primary
-  name        = "${var.project_name}-trusted-scrub-sg"
-  description = "Security group for Trusted Scrub EC2 instance"
-  vpc_id      = module.trusted_vpc_streaming_scrub.vpc_id
+# --- Ingress & Scrub Hosts ---
+resource "aws_security_group" "untrusted_ingress_sg" {
+  provider = aws.primary
+  name     = "${var.project_name}-untrusted-ingress-sg"
+  description = "Untrusted Ingress EC2"
+  vpc_id   = module.untrusted_vpc_streaming_ingress.vpc_id
 
-  # SSH from VPN clients (not VPN subnet)
   ingress {
-    description = "SSH from Trusted VPN Clients"
+    description = "SSH from DevOps NAT"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = [var.trusted_vpn_client_cidr]  # 172.30.0.0/22
+    cidr_blocks = [var.untrusted_vpc_cidrs["devops"]]
   }
 
-  # UDP from untrusted scrub via peering
-  ingress {
-    description = "UDP from untrusted scrub via peering"
-    from_port   = var.peering_udp_port
-    to_port     = var.peering_udp_port
-    protocol    = "udp"
-    cidr_blocks = [var.untrusted_vpc_cidrs["streaming_scrub"]]
+  dynamic "ingress" {
+    for_each = var.srt_udp_ports
+    content {
+      description = "UDP Port ${ingress.value}"
+      from_port   = ingress.value
+      to_port     = ingress.value
+      protocol    = "udp"
+      cidr_blocks = ["0.0.0.0/0"]
+    }
   }
 
-  # Allow all outbound traffic
   egress {
-    description = "Allow all outbound traffic"
+    description = "All outbound"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = { Name = "${var.project_name}-untrusted-ingress-sg" }
+}
+
+resource "aws_security_group" "untrusted_scrub_sg" {
+  provider = aws.primary
+  name     = "${var.project_name}-untrusted-scrub-sg"
+  description = "Untrusted Scrub EC2"
+  vpc_id   = module.untrusted_vpc_streaming_scrub.vpc_id
+
+  ingress {
+    description = "SSH from VPN"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = [var.untrusted_vpn_client_cidr]
+  }
+
+  dynamic "ingress" {
+    for_each = var.srt_udp_ports
+    content {
+      description = "UDP from Ingress"
+      from_port   = var.peering_udp_port
+      to_port     = var.peering_udp_port
+      protocol    = "udp"
+      cidr_blocks = [var.untrusted_vpc_cidrs["streaming_ingress"]]
+    }
+  }
+
+  egress {
+    description = "All outbound"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = { Name = "${var.project_name}-untrusted-scrub-sg" }
+}
+
+resource "aws_security_group" "trusted_scrub_sg" {
+  provider = aws.primary
+  name     = "${var.project_name}-trusted-scrub-sg"
+  description = "Trusted Scrub EC2"
+  vpc_id   = module.trusted_vpc_streaming_scrub.vpc_id
+
+  ingress {
+    description = "SSH from VPN"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = [var.trusted_vpn_client_cidr]
+  }
+
+  dynamic "ingress" {
+    for_each = var.srt_udp_ports
+    content {
+      description = "UDP from Untrusted Scrub"
+      from_port   = ingress.value
+      to_port     = ingress.value
+      protocol    = "udp"
+      cidr_blocks = [var.untrusted_vpc_cidrs["streaming_scrub"]]
+    }
+  }
+
+  egress {
+    description = "All outbound"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -186,67 +230,27 @@ resource "aws_security_group" "trusted_scrub_sg" {
   tags = { Name = "${var.project_name}-trusted-scrub-sg" }
 }
 
-# Security Group for Trusted Streaming Host
 resource "aws_security_group" "trusted_streaming_sg" {
-  provider    = aws.primary
-  name        = "${var.project_name}-trusted-streaming-sg"
-  description = "Security group for Trusted Streaming Docker Host"
-  vpc_id      = module.trusted_vpc_streaming.vpc_id
+  provider = aws.primary
+  name     = "${var.project_name}-trusted-streaming-sg"
+  description = "Trusted Streaming EC2"
+  vpc_id   = module.trusted_vpc_streaming.vpc_id
 
-  # SSH from VPN clients (not VPN subnet)
   ingress {
-    description = "SSH from Trusted VPN Clients"
+    description = "SSH from VPN"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = [var.trusted_vpn_client_cidr]  # 172.30.0.0/22
+    cidr_blocks = [var.trusted_vpn_client_cidr]
   }
 
-  # UDP from trusted scrub
-  ingress {
-    description = "UDP from trusted scrub"
-    from_port   = var.peering_udp_port
-    to_port     = var.peering_udp_port
-    protocol    = "udp"
-    cidr_blocks = [var.trusted_vpc_cidrs["streaming_scrub"]]
-  }
-
-  # Allow all outbound traffic
   egress {
-    description = "Allow all outbound traffic"
+    description = "Outbound to trusted"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = values(var.trusted_vpc_cidrs)
   }
 
   tags = { Name = "${var.project_name}-trusted-streaming-sg" }
-}
-
-# Security Group for Trusted DevOps Agent
-resource "aws_security_group" "trusted_agent_sg" {
-  provider    = aws.primary
-  name        = "${var.project_name}-trusted-agent-sg"
-  description = "Security group for Trusted DevOps Agent - CI/CD only"
-  vpc_id      = module.trusted_vpc_devops.vpc_id
-
-  # SSH from VPN clients (not VPN subnet)
-  ingress {
-    description = "SSH from Trusted VPN Clients"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = [var.trusted_vpn_client_cidr]  # 172.30.0.0/22
-  }
-
-  # Allow all outbound traffic (internet access for CI/CD)
-  egress {
-    description = "All outbound traffic for CI/CD"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = { Name = "${var.project_name}-trusted-agent-sg" }
 }

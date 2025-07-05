@@ -114,10 +114,7 @@ module "untrusted_devops_host" {
   associate_public_ip = true
   custom_ami_id     = var.use_custom_amis ? var.custom_standard_ami_id : null
   allowed_ssh_cidrs = [var.untrusted_vpn_client_cidr]
-  allowed_udp_ports = []
-  allowed_udp_cidrs = []
-  allowed_egress_udp_ports = []
-  allowed_egress_udp_cidrs = []
+
   user_data = var.enable_ado_agents ? templatefile("${path.module}/templates/ado-agent-userdata.sh", {
     aws_region                    = var.primary_region
     ecr_registry_url             = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.primary_region}.amazonaws.com"

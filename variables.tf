@@ -145,13 +145,13 @@ variable "saml_identity_provider_arn" {
 variable "trusted_vpn_client_cidr" {
   description = "The CIDR block for clients connecting to the trusted VPN."
   type        = string
-  default     = "172.30.0.0/22"
+  default     = "172.30.20.0/22"
 }
 
 variable "untrusted_vpn_client_cidr" {
   description = "The CIDR block for clients connecting to the untrusted VPN."
   type        = string
-  default     = "172.31.0.0/22"
+  default     = "172.31.16.0/22"
 }
 
 ################################################################################
