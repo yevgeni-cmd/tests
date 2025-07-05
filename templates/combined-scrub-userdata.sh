@@ -15,11 +15,11 @@ echo "=== PART 1: SSH Configuration Fix ==="
 
 # Wait for cloud-init to complete with timeout
 echo "Waiting for cloud-init to complete..."
-timeout 300 cloud-init status --wait || {
-    echo "WARNING: cloud-init wait timed out after 5 minutes, continuing anyway..."
-    echo "Cloud-init status:"
-    cloud-init status || echo "Could not get cloud-init status"
-}
+# timeout 300 cloud-init status --wait || {
+#     echo "WARNING: cloud-init wait timed out after 5 minutes, continuing anyway..."
+#     echo "Cloud-init status:"
+#     cloud-init status || echo "Could not get cloud-init status"
+# }
 echo "Cloud-init wait completed or timed out, proceeding..."
 
 # Ensure SSH service is running
