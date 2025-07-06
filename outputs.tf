@@ -10,7 +10,6 @@ output "deployment_targets" {
         service_name = "media-server"
         environment = "untrusted"
       }
-      # Note: Scrub host not included as it only forwards traffic
     }
     trusted = {
       scrub_host = {

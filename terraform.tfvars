@@ -27,7 +27,7 @@ custom_standard_ami_id = "ami-0ea2fce7f7afb4f4c"
 # Instance type configurations (customize as needed)
 instance_types = {
   # Untrusted environment
-  untrusted_ingress    = "c5.xlarge"   # Upgrade for high-bandwidth streaming ingress
+  untrusted_ingress    = "c5.large"   # Upgrade for high-bandwidth streaming ingress
   untrusted_scrub      = "t3.micro"    # Minimal - just traffic forwarding
   untrusted_devops     = "t3.medium"   # DevOps management
   
@@ -53,7 +53,7 @@ srt_udp_ports = [8890]
 
 
 # Azure DevOps Agent Configuration
-enable_ado_agents      = false
+enable_ado_agents      = true
 ado_organization_url   = "https://dev.azure.com/cloudburstnet"
 ado_agent_pool_name    = "Self-Hosted-AWS"
 ado_pat_secret_name    = "poc-ado-pat"           

@@ -79,6 +79,7 @@ resource "aws_security_group" "this" {
     }
   }
 
+  # FIXED: SSH access from VPN clients AND DevOps VPC (for VPN NAT)
   dynamic "ingress" {
     for_each = toset(var.allowed_ssh_cidrs)
     content {
@@ -89,20 +90,25 @@ resource "aws_security_group" "this" {
     }
   }
 
-  egress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "HTTPS for ECR/updates"
+  # FIXED: Add DevOps VPC access for VPN NAT traffic
+  dynamic "ingress" {
+    for_each = var.devops_vpc_cidr != null ? ["devops"] : []
+    content {
+      from_port   = 22
+      to_port     = 22
+      protocol    = "tcp"
+      cidr_blocks = [var.devops_vpc_cidr]
+      description = "SSH from DevOps VPC (VPN NAT)"
+    }
   }
 
+  # FIXED: Full internet access for DevOps and management hosts
   egress {
-    from_port   = 1024
-    to_port     = 65535
-    protocol    = "tcp"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
-    description = "Ephemeral ports for return traffic"
+    description = "Full internet access"
   }
 
   dynamic "egress" {

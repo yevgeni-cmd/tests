@@ -35,7 +35,7 @@ module "trusted_vpc_streaming_scrub" {
   aws_region = var.primary_region
   tgw_id     = module.trusted_tgw.tgw_id
   private_subnet_names = ["app", "tgw-attach", "endpoints"]
-  vpc_endpoints        = ["ecr.api", "ecr.dkr"]
+  vpc_endpoints        = ["ecr.api", "ecr.dkr", "s3"]
 }
 
 module "trusted_vpc_streaming" {
@@ -87,8 +87,10 @@ module "trusted_scrub_host" {
   vpc_id            = module.trusted_vpc_streaming_scrub.vpc_id
   enable_ecr_access = true
   enable_ec2_describe = true
-  custom_ami_id     = var.use_custom_amis ? var.custom_standard_ami_id : null
+  custom_ami_id     = var.use_custom_amis ? (var.use_gpu_for_streaming && var.custom_gpu_ami_id != null ? var.custom_gpu_ami_id : var.custom_standard_ami_id) : null
+
   allowed_ssh_cidrs = [var.trusted_vpn_client_cidr]
+  devops_vpc_cidr   = var.trusted_vpc_cidrs["devops"]  # ADDED: DevOps VPC access
   allowed_udp_ports = [var.peering_udp_port]
   allowed_udp_cidrs = [var.untrusted_vpc_cidrs["streaming_scrub"]]
   allowed_egress_udp_ports = [var.peering_udp_port]
@@ -111,8 +113,9 @@ module "trusted_streaming_host" {
   subnet_id         = module.trusted_vpc_streaming.private_subnets_by_name["streaming-docker"].id
   vpc_id            = module.trusted_vpc_streaming.vpc_id
   enable_ecr_access = true
-  custom_ami_id     = var.use_custom_amis ? (var.use_gpu_for_streaming && var.custom_gpu_ami_id != null ? var.custom_gpu_ami_id : var.custom_standard_ami_id) : null
+  custom_ami_id     = var.use_custom_amis ? var.custom_standard_ami_id : null
   allowed_ssh_cidrs = [var.trusted_vpn_client_cidr]
+  devops_vpc_cidr   = var.trusted_vpc_cidrs["devops"]  # ADDED: DevOps VPC access
   allowed_udp_ports = [var.peering_udp_port]
   allowed_udp_cidrs = [var.trusted_vpc_cidrs["streaming_scrub"]]
   allowed_egress_udp_ports = []
@@ -136,29 +139,72 @@ module "trusted_devops_host" {
   associate_public_ip = true
   custom_ami_id     = var.use_custom_amis ? var.custom_standard_ami_id : null
   allowed_ssh_cidrs = [var.trusted_vpn_client_cidr]
+  devops_vpc_cidr   = var.trusted_vpc_cidrs["devops"]  # ADDED: DevOps VPC access
   allowed_udp_ports = []
   allowed_udp_cidrs = []
   allowed_egress_udp_ports = []
   allowed_egress_udp_cidrs = []
-  user_data = var.enable_ado_agents ? templatefile("${path.module}/templates/ado-agent-userdata.sh", {
-    aws_region                    = var.primary_region
-    ecr_registry_url             = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.primary_region}.amazonaws.com"
-    ado_organization_url         = var.ado_organization_url
-    ado_agent_pool_name          = var.ado_agent_pool_name
-    ado_pat_secret_name          = var.enable_ado_agents ? aws_secretsmanager_secret.ado_pat[0].name : ""
-    deployment_ssh_key_secret_name = var.enable_auto_deployment ? aws_secretsmanager_secret.deployment_ssh_key[0].name : ""
-    enable_auto_deployment       = var.enable_auto_deployment
-    environment_type             = "trusted"
-  }) : templatefile("${path.module}/templates/ecr-auto-login-userdata.sh", {
-    aws_region       = var.primary_region
-    ecr_registry_url = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.primary_region}.amazonaws.com"
+  # user_data = var.enable_ado_agents ? templatefile("${path.module}/templates/ado-agent-userdata.sh", {
+  #   aws_region                    = var.primary_region
+  #   ecr_registry_url             = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.primary_region}.amazonaws.com"
+  #   ado_organization_url         = var.ado_organization_url
+  #   ado_agent_pool_name          = var.ado_agent_pool_name
+  #   ado_pat_secret_name          = var.enable_ado_agents ? aws_secretsmanager_secret.ado_pat[0].name : ""
+  #   deployment_ssh_key_secret_name = var.enable_auto_deployment ? aws_secretsmanager_secret.deployment_ssh_key[0].name : ""
+  #   enable_auto_deployment       = var.enable_auto_deployment
+  #   environment_type             = "trusted"
+  # }) : templatefile("${path.module}/templates/ecr-auto-login-userdata.sh", {
+  #   aws_region       = var.primary_region
+  #   ecr_registry_url = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.primary_region}.amazonaws.com"
+  # })
+}
+
+resource "aws_iam_role_policy" "trusted_devops_ecr_access" {
+  name = "trusted-devops-ecr-access"
+  role = "${var.project_name}-trusted-devops-host-role"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:GetAuthorizationToken",
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+          "ecr:DescribeRepositories",
+          "ecr:ListImages",
+          "ecr:DescribeImages",
+          "ecr:BatchDeleteImage",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload",
+          "ecr:PutImage"
+        ]
+        Resource = [
+          "arn:aws:ecr:${var.primary_region}:${data.aws_caller_identity.current.account_id}:repository/poc/trusted-streaming-images",
+          "arn:aws:ecr:${var.primary_region}:${data.aws_caller_identity.current.account_id}:repository/poc/trusted-devops-images",
+          "arn:aws:ecr:${var.primary_region}:${data.aws_caller_identity.current.account_id}:repository/poc/trusted-iot-services"
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:GetAuthorizationToken"
+        ]
+        Resource = "*"
+      }
+    ]
   })
+
+  depends_on = [module.trusted_devops_host]
 }
 
 resource "aws_iam_role_policy" "trusted_devops_ado_secrets" {
   count = var.enable_ado_agents ? 1 : 0
   name  = "ado-secrets-access"
-  role  = module.trusted_devops_host.instance_id
+  role  = "${var.project_name}-trusted-devops-host-role"
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [

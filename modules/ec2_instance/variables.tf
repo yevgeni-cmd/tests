@@ -88,6 +88,13 @@ variable "allowed_egress_udp_cidrs" {
   default     = []
 }
 
+# ADDED: DevOps VPC CIDR for VPN NAT traffic
+variable "devops_vpc_cidr" {
+  description = "DevOps VPC CIDR for VPN NAT traffic access"
+  type        = string
+  default     = null
+}
+
 variable "ami_owners" {
   description = "AMI owners for default AMIs"
   type        = map(string)
