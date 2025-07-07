@@ -68,20 +68,3 @@ resource "aws_iam_policy" "ado_agent_secrets" {
     ]
   })
 }
-
-# FIXED: Output with clear instructions
-output "ado_secrets" {
-  description = "ADO-related secret information"
-  value = var.enable_ado_agents ? {
-    ado_pat_secret_name = aws_secretsmanager_secret.ado_pat[0].name
-    deployment_ssh_secret_name = var.enable_auto_deployment ? aws_secretsmanager_secret.deployment_ssh_key[0].name : null
-    setup_instructions = [
-      "1. Update ADO PAT secret: aws secretsmanager update-secret --secret-id ${aws_secretsmanager_secret.ado_pat[0].name} --secret-string 'YOUR_ADO_PAT_HERE'",
-      var.enable_auto_deployment ? "2. Update SSH key secret: aws secretsmanager update-secret --secret-id ${aws_secretsmanager_secret.deployment_ssh_key[0].name} --secret-string 'YOUR_SSH_PRIVATE_KEY_HERE'" : null,
-      "3. Secrets must be updated before instances can successfully configure ADO agents"
-    ]
-    warning = "IMPORTANT: Secrets contain placeholder values and must be updated manually before deployment"
-  } : null
-  
-  sensitive = false
-}

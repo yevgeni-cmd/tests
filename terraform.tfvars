@@ -42,7 +42,7 @@ use_gpu_for_streaming = true          # Set to true to enable GPU
 gpu_instance_type     = "g5.xlarge"   # GPU instance type when enabled
 
 # GPU-enabled custom AMI (create this after building GPU AMI)
-custom_gpu_ami_id = "ami-0ea2fce7f7afb4f4c"  # Replace with your GPU AMI ID when available
+custom_gpu_ami_id = "ami-04e22fc5618e54eac"  # Replace with your GPU AMI ID when available
 
 # UDP ports for SRT streaming
 srt_udp_ports = [8890]

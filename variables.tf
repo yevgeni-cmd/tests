@@ -285,3 +285,38 @@ variable "trusted_cidr_block" {
   default     = "172.16.0.0/16"
 }
 
+variable "trusted_scrub_ami_id" {
+  description = "Custom AMI ID specifically for trusted scrub host. Overrides other AMI settings when specified."
+  type        = string
+  default     = null
+}
+
+variable "trusted_streaming_ami_id" {
+  description = "Custom AMI ID specifically for trusted streaming host. Overrides other AMI settings when specified."
+  type        = string
+  default     = null
+}
+
+variable "untrusted_scrub_ami_id" {
+  description = "Custom AMI ID specifically for untrusted scrub host. Overrides other AMI settings when specified."
+  type        = string
+  default     = null
+}
+
+variable "untrusted_ingress_ami_id" {
+  description = "Custom AMI ID specifically for untrusted ingress host. Overrides other AMI settings when specified."
+  type        = string
+  default     = null
+}
+
+variable "environment_tags" {
+  description = "Environment tag values for different environments"
+  type = object({
+    trusted   = string
+    untrusted = string
+  })
+  default = {
+    trusted   = "Trusted"
+    untrusted = "Untrusted"
+  }
+}

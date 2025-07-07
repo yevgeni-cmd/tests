@@ -4,37 +4,37 @@ output "deployment_targets" {
   value = {
     untrusted = {
       ingress_host = {
-        private_ip = module.untrusted_ingress_host.private_ip
-        public_ip  = module.untrusted_ingress_host.public_ip
-        image_repo = "poc/untrusted-devops-images"
+        private_ip   = module.untrusted_ingress_host.private_ip
+        public_ip    = module.untrusted_ingress_host.public_ip
+        image_repo   = aws_ecr_repository.untrusted_devops.name
         service_name = "media-server"
-        environment = "untrusted"
+        environment  = var.environment_tags.untrusted
       }
     }
     trusted = {
       scrub_host = {
-        private_ip = module.trusted_scrub_host.private_ip
-        image_repo = "poc/trusted-streaming-images"
+        private_ip   = module.trusted_scrub_host.private_ip
+        image_repo   = aws_ecr_repository.trusted_devops.name
         service_name = "stream-processor"
-        environment = "trusted"
+        environment  = var.environment_tags.trusted
       }
       streaming_host = {
-        private_ip = module.trusted_streaming_host.private_ip
-        image_repo = "poc/trusted-streaming-images"
+        private_ip   = module.trusted_streaming_host.private_ip
+        image_repo   = aws_ecr_repository.trusted_devops.name
         service_name = "gpu-processor"
-        environment = "trusted"
+        environment  = var.environment_tags.trusted
       }
     }
     devops_agents = {
       trusted = {
-        private_ip = module.trusted_devops_host.private_ip
-        public_ip = module.trusted_devops_host.public_ip
-        environment = "trusted"
+        private_ip  = module.trusted_devops_host.private_ip
+        public_ip   = module.trusted_devops_host.public_ip
+        environment = var.environment_tags.trusted
       }
       untrusted = {
-        private_ip = module.untrusted_devops_host.private_ip
-        public_ip = module.untrusted_devops_host.public_ip
-        environment = "untrusted"
+        private_ip  = module.untrusted_devops_host.private_ip
+        public_ip   = module.untrusted_devops_host.public_ip
+        environment = var.environment_tags.untrusted
       }
     }
   }
@@ -47,10 +47,8 @@ output "ecr_configuration" {
     registry_url = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.primary_region}.amazonaws.com"
     region = var.primary_region
     repositories = {
-      untrusted_devops = "${var.project_name}/untrusted-devops-images"
-      trusted_devops = "${var.project_name}/trusted-devops-images"
-      trusted_streaming = "${var.project_name}/trusted-streaming-images"
-      trusted_iot = "${var.project_name}/trusted-iot-services"
+      untrusted_devops = aws_ecr_repository.untrusted_devops.name
+      trusted_devops   = aws_ecr_repository.trusted_devops.name
     }
   }
 }
@@ -74,23 +72,55 @@ output "ado_pipeline_variables" {
     TRUSTED_DEVOPS_AGENT_IP = module.trusted_devops_host.private_ip
     UNTRUSTED_DEVOPS_AGENT_IP = module.untrusted_devops_host.private_ip
     
-    # Image repositories
-    UNTRUSTED_IMAGE_REPO = "${var.project_name}/untrusted-devops-images"
-    TRUSTED_IMAGE_REPO = "${var.project_name}/trusted-streaming-images"
+    # Simplified image repositories - both environments use their respective devops repo
+    UNTRUSTED_IMAGE_REPO = aws_ecr_repository.untrusted_devops.name
+    TRUSTED_IMAGE_REPO = aws_ecr_repository.trusted_devops.name
   })
 }
 
-# Manual setup instructions
+# Automated setup instructions for your existing script
 output "ado_setup_instructions" {
-  description = "Instructions for setting up ADO pipeline variables"
+  description = "Instructions for setting up ADO pipeline variables using your script"
   value = [
-    "1. Copy the JSON from 'ado_pipeline_variables' output",
-    "2. In ADO, go to Pipelines → Library → Variable Groups",
+    "=== Automated Setup (Recommended) ===",
+    "1. Export Terraform output to JSON:",
+    "   terraform output -json > terraform-output.json",
+    "",
+    "2. Run your automated setup script:",
+    "   ./templates/setup-ado-variables.sh terraform-output.json",
+    "",
+    "3. Configure the script with your ADO details:",
+    "   export ADO_ORGANIZATION='https://dev.azure.com/cloudburstnet'",
+    "   export ADO_PROJECT='your-project-name'",
+    "   export VARIABLE_GROUP_NAME='${var.project_name}-deployment-vars'",
+    "",
+    "=== Manual Setup (Alternative) ===",
+    "1. Copy the JSON from 'ado_pipeline_variables' output above",
+    "2. In ADO, go to Pipelines → Library → Variable Groups", 
     "3. Create variable group: '${var.project_name}-deployment-vars'",
     "4. Add each key-value pair from the JSON as pipeline variables",
     "5. Link this variable group to your pipeline",
-    "6. Use variables in pipeline: $(ECR_REGISTRY), $(TRUSTED_SCRUB_IP), etc."
+    "",
+    "=== Usage in Pipelines ===",
+    "Use variables like: $(ECR_REGISTRY), $(TRUSTED_SCRUB_IP), $(PROJECT_NAME)"
   ]
+}
+
+# ADO secrets information (without SSH key references)
+output "ado_secrets" {
+  description = "ADO-related secret information"
+  value = var.enable_ado_agents ? {
+    ado_pat_secret_name = aws_secretsmanager_secret.ado_pat[0].name
+    setup_instructions = [
+      "Update ADO PAT secret:",
+      "aws secretsmanager update-secret --secret-id ${aws_secretsmanager_secret.ado_pat[0].name} --secret-string 'YOUR_ADO_PAT_HERE'",
+      "",
+      "Secrets must be updated before ADO agents can configure successfully"
+    ]
+    warning = "IMPORTANT: ADO PAT secret contains placeholder value and must be updated manually before deployment"
+  } : null
+  
+  sensitive = false
 }
 
 # Untrusted Environment IPs (keeping for compatibility)

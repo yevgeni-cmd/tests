@@ -25,7 +25,7 @@ resource "aws_route" "untrusted_scrub_to_trusted_scrub" {
 }
 
 ################################################################################
-# FIXED: Complete TGW Routes for All VPC Communication
+# Complete TGW Routes for All VPC Communication
 ################################################################################
 
 # UNTRUSTED ENVIRONMENT - Complete Bidirectional Routing
@@ -108,12 +108,12 @@ resource "aws_route" "untrusted_devops_public_to_iot" {
   ]
 }
 
-# FIXED: Return Routes from Other VPCs to DevOps VPC
-
-# Ingress VPC → DevOps VPC (for SSH return traffic)
-resource "aws_route" "untrusted_ingress_public_to_devops" {
+# Use for_each to handle multiple route tables in the ingress VPC
+resource "aws_route" "untrusted_ingress_to_devops" {
+  for_each = toset(module.untrusted_vpc_streaming_ingress.public_route_table_ids)
+  
   provider               = aws.primary
-  route_table_id         = module.untrusted_vpc_streaming_ingress.public_route_table_id
+  route_table_id         = each.value
   destination_cidr_block = var.untrusted_vpc_cidrs["devops"]
   transit_gateway_id     = module.untrusted_tgw.tgw_id
 
@@ -125,8 +125,10 @@ resource "aws_route" "untrusted_ingress_public_to_devops" {
 }
 
 resource "aws_route" "untrusted_ingress_private_to_devops" {
+  for_each = toset(module.untrusted_vpc_streaming_ingress.private_route_table_ids)
+  
   provider               = aws.primary
-  route_table_id         = module.untrusted_vpc_streaming_ingress.private_route_table_id
+  route_table_id         = each.value
   destination_cidr_block = var.untrusted_vpc_cidrs["devops"]
   transit_gateway_id     = module.untrusted_tgw.tgw_id
 
@@ -556,8 +558,36 @@ resource "aws_route" "trusted_spoke_return_path" {
   transit_gateway_id     = module.trusted_tgw.tgw_id
 }
 
+# Basic IGW routes for public subnets
+resource "aws_route" "untrusted_devops_public_igw" {
+  count                  = module.untrusted_vpc_devops.internet_gateway_id != null ? 1 : 0
+  provider               = aws.primary
+  route_table_id         = module.untrusted_vpc_devops.public_route_table_id
+  destination_cidr_block = "0.0.0.0/0"
+  gateway_id             = module.untrusted_vpc_devops.internet_gateway_id
+}
 
+resource "aws_route" "untrusted_ingress_public_igw" {
+  count                  = module.untrusted_vpc_streaming_ingress.internet_gateway_id != null ? 1 : 0
+  provider               = aws.primary
+  route_table_id         = module.untrusted_vpc_streaming_ingress.public_route_table_id
+  destination_cidr_block = "0.0.0.0/0"
+  gateway_id             = module.untrusted_vpc_streaming_ingress.internet_gateway_id
+}
 
+resource "aws_route" "trusted_devops_public_igw" {
+  count                  = module.trusted_vpc_devops.internet_gateway_id != null ? 1 : 0
+  provider               = aws.primary
+  route_table_id         = module.trusted_vpc_devops.public_route_table_id
+  destination_cidr_block = "0.0.0.0/0"
+  gateway_id             = module.trusted_vpc_devops.internet_gateway_id
+}
 
-
-
+# NAT routes only if NAT gateway exists
+resource "aws_route" "trusted_devops_private_nat" {
+  count                  = module.trusted_vpc_devops.nat_gateway_id != null ? 1 : 0
+  provider               = aws.primary
+  route_table_id         = module.trusted_vpc_devops.private_route_table_id
+  destination_cidr_block = "0.0.0.0/0"
+  nat_gateway_id         = module.trusted_vpc_devops.nat_gateway_id
+}

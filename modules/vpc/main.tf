@@ -94,10 +94,10 @@ resource "aws_route_table" "public" {
   count  = local.create_public_rt ? 1 : 0
   vpc_id = aws_vpc.this.id
 
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.this[0].id
-  }
+  # route {
+  #   cidr_block = "0.0.0.0/0"
+  #   gateway_id = aws_internet_gateway.this[0].id
+  # }
 
   tags = { Name = "rt-${var.name}-public" }
 }
@@ -107,14 +107,7 @@ resource "aws_route_table" "private" {
   count  = length(var.private_subnet_names) > 0 ? 1 : 0
   vpc_id = aws_vpc.this.id
 
-  # Only add NAT gateway route if NAT gateway is created
-  dynamic "route" {
-    for_each = var.create_nat_gateway ? ["nat"] : []
-    content {
-      cidr_block     = "0.0.0.0/0"
-      nat_gateway_id = aws_nat_gateway.nat[0].id
-    }
-  }
+  # Remove inline routes - let separate route resources handle this
 
   tags = { Name = "rt-${var.name}-private" }
 }
