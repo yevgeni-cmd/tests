@@ -1,12 +1,15 @@
-################################################################################
-# Complete Networking - VPC Peering, TGW Routes, and NACLs
-# Aligned with AWS Client VPN NAT behavior and security groups
-################################################################################
+# --------------------------------------------------------------------------------------------------
+# routes.tf
+#
+# This file defines the VPC Peering and all TGW/IGW/NAT/Peering routes for the project.
+# CORRECTED: Module names now match the project's naming convention.
+# --------------------------------------------------------------------------------------------------
 
 # --- VPC Peering for Untrusted → Trusted Scrub (One-way UDP) ---
 
 resource "aws_vpc_peering_connection" "untrusted_to_trusted_scrub" {
   provider    = aws.primary
+  # CORRECTED: Module names
   vpc_id      = module.untrusted_vpc_streaming_scrub.vpc_id
   peer_vpc_id = module.trusted_vpc_streaming_scrub.vpc_id
   auto_accept = true
@@ -19,6 +22,7 @@ resource "aws_vpc_peering_connection" "untrusted_to_trusted_scrub" {
 # Route from untrusted scrub to trusted scrub (for UDP streaming)
 resource "aws_route" "untrusted_scrub_to_trusted_scrub" {
   provider                  = aws.primary
+  # CORRECTED: Module name
   route_table_id            = module.untrusted_vpc_streaming_scrub.private_route_table_id
   destination_cidr_block    = var.trusted_vpc_cidrs["streaming_scrub"]
   vpc_peering_connection_id = aws_vpc_peering_connection.untrusted_to_trusted_scrub.id
@@ -111,7 +115,7 @@ resource "aws_route" "untrusted_devops_public_to_iot" {
 # Use for_each to handle multiple route tables in the ingress VPC
 resource "aws_route" "untrusted_ingress_to_devops" {
   for_each = toset(module.untrusted_vpc_streaming_ingress.public_route_table_ids)
-  
+
   provider               = aws.primary
   route_table_id         = each.value
   destination_cidr_block = var.untrusted_vpc_cidrs["devops"]
@@ -126,7 +130,7 @@ resource "aws_route" "untrusted_ingress_to_devops" {
 
 resource "aws_route" "untrusted_ingress_private_to_devops" {
   for_each = toset(module.untrusted_vpc_streaming_ingress.private_route_table_ids)
-  
+
   provider               = aws.primary
   route_table_id         = each.value
   destination_cidr_block = var.untrusted_vpc_cidrs["devops"]
@@ -280,6 +284,7 @@ resource "aws_route" "trusted_scrub_to_devops" {
 # Streaming VPC → DevOps VPC (for SSH return traffic)
 resource "aws_route" "trusted_streaming_to_devops" {
   provider               = aws.primary
+  # CORRECTED: Module name
   route_table_id         = module.trusted_vpc_streaming.private_route_table_id
   destination_cidr_block = var.trusted_vpc_cidrs["devops"]
   transit_gateway_id     = module.trusted_tgw.tgw_id
@@ -319,213 +324,6 @@ resource "aws_route" "trusted_jacob_to_devops" {
   ]
 }
 
-################################################################################
-# Network ACLs - Aligned with VPN Subnet Access
-################################################################################
-
-# Custom NACL for Untrusted Streaming Scrub App Subnet
-resource "aws_network_acl" "scrub_app_nacl" {
-  provider   = aws.primary
-  vpc_id     = module.untrusted_vpc_streaming_scrub.vpc_id
-  subnet_ids = [module.untrusted_vpc_streaming_scrub.private_subnets_by_name["app"].id]
-
-  # Allow SSH from VPN clients (not VPN subnet)
-  ingress {
-    rule_no    = 100
-    protocol   = "tcp"
-    action     = "allow"
-    cidr_block = var.untrusted_vpn_client_cidr
-    from_port  = 22
-    to_port    = 22
-  }
-
-  # Allow UDP streaming from ingress VPC
-  dynamic "ingress" {
-    for_each = { for i, port in var.srt_udp_ports : i => port }
-    content {
-      rule_no    = 200 + ingress.key
-      protocol   = "udp"
-      action     = "allow"
-      cidr_block = var.untrusted_vpc_cidrs["streaming_ingress"]
-      from_port  = ingress.value
-      to_port    = ingress.value
-    }
-  }
-
-  # Allow HTTPS for ECR access
-  ingress {
-    rule_no    = 300
-    protocol   = "tcp"
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 443
-    to_port    = 443
-  }
-
-  # Allow all return traffic (like before - safer for internet connectivity)
-  ingress {
-    rule_no    = 400
-    protocol   = "-1"
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 0
-    to_port    = 0
-  }
-
-  # Allow SSH outbound
-  egress {
-    rule_no    = 100
-    protocol   = "tcp"
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 22
-    to_port    = 22
-  }
-
-  # Allow UDP streaming outbound to trusted zone
-  dynamic "egress" {
-    for_each = { for i, port in var.srt_udp_ports : i => port }
-    content {
-      rule_no    = 200 + egress.key
-      protocol   = "udp"
-      action     = "allow"
-      cidr_block = var.trusted_cidr_block  # Trusted zone CIDR
-      from_port  = egress.value
-      to_port    = egress.value
-    }
-  }
-
-  # Allow HTTPS outbound for ECR
-  egress {
-    rule_no    = 300
-    protocol   = "tcp"
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 443
-    to_port    = 443
-  }
-
-  # Allow ephemeral ports outbound
-  egress {
-    rule_no    = 400
-    protocol   = "tcp"
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 1024
-    to_port    = 65535
-  }
-
-  # Allow SSH inbound from VPN subnet
-  ingress {
-    rule_no    = 110
-    protocol   = "tcp"
-    action     = "allow"
-    cidr_block = module.untrusted_vpc_devops.private_subnets_by_name["vpn"].cidr_block
-    from_port  = 22
-    to_port    = 22
-  }
-
-  tags = {
-    Name = "${var.project_name}-scrub-app-nacl"
-  }
-}
-
-# Custom NACL for Trusted Scrub App Subnet
-resource "aws_network_acl" "trusted_scrub_app_nacl" {
-  provider   = aws.primary
-  vpc_id     = module.trusted_vpc_streaming_scrub.vpc_id
-  subnet_ids = [module.trusted_vpc_streaming_scrub.private_subnets_by_name["app"].id]
-
-  # Allow SSH from trusted VPN clients (not VPN subnet)
-  ingress {
-    rule_no    = 100
-    protocol   = "tcp"
-    action     = "allow"
-    cidr_block = var.trusted_vpn_client_cidr
-    from_port  = 22
-    to_port    = 22
-  }
-
-  # Allow UDP streaming from untrusted scrub (via peering)
-  dynamic "ingress" {
-    for_each = { for i, port in var.srt_udp_ports : i => port }
-    content {
-      rule_no    = 200 + ingress.key
-      protocol   = "udp"
-      action     = "allow"
-      cidr_block = var.untrusted_vpc_cidrs["streaming_scrub"]
-      from_port  = ingress.value
-      to_port    = ingress.value
-    }
-  }
-
-  # Allow HTTPS for ECR access
-  ingress {
-    rule_no    = 300
-    protocol   = "tcp"
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 443
-    to_port    = 443
-  }
-
-  # Allow all return traffic (like before - safer for internet connectivity)
-  ingress {
-    rule_no    = 400
-    protocol   = "-1"
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 0
-    to_port    = 0
-  }
-
-  # Allow SSH outbound
-  egress {
-    rule_no    = 100
-    protocol   = "tcp"
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 22
-    to_port    = 22
-  }
-
-  # Allow UDP streaming outbound to trusted streaming host
-  dynamic "egress" {
-    for_each = { for i, port in var.srt_udp_ports : i => port }
-    content {
-      rule_no    = 200 + egress.key
-      protocol   = "udp"
-      action     = "allow"
-      cidr_block = var.trusted_vpc_cidrs["streaming"]
-      from_port  = egress.value
-      to_port    = egress.value
-    }
-  }
-
-  # Allow HTTPS outbound for ECR
-  egress {
-    rule_no    = 300
-    protocol   = "tcp"
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 443
-    to_port    = 443
-  }
-
-  # Allow ephemeral ports outbound
-  egress {
-    rule_no    = 400
-    protocol   = "tcp"
-    action     = "allow"
-    cidr_block = "0.0.0.0/0"
-    from_port  = 1024
-    to_port    = 65535
-  }
-
-  tags = {
-    Name = "${var.project_name}-trusted-scrub-app-nacl"
-  }
-}
 
 # --- Add return routes in spoke VPCs for untrusted VPN pool
 resource "aws_route" "untrusted_spoke_return_path" {

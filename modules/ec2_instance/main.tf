@@ -136,9 +136,16 @@ resource "aws_instance" "this" {
   user_data                   = var.user_data
 
   tags = { Name = var.instance_name }
+
+  # FIXED: Only ignore the configurable attribute, not computed ones
+  lifecycle {
+    ignore_changes = [
+      associate_public_ip_address
+    ]
+  }
 }
 
-### DUBUG 
+### DEBUG 
 resource "aws_iam_role_policy_attachment" "ssm_policy" {
   role       = aws_iam_role.ec2_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"

@@ -5,7 +5,7 @@ output "deployment_targets" {
     untrusted = {
       ingress_host = {
         private_ip   = module.untrusted_ingress_host.private_ip
-        public_ip    = module.untrusted_ingress_host.public_ip
+        public_ip    = aws_eip.untrusted_ingress.public_ip  # Use EIP instead
         image_repo   = aws_ecr_repository.untrusted_devops.name
         service_name = "media-server"
         environment  = var.environment_tags.untrusted
@@ -63,7 +63,7 @@ output "ado_pipeline_variables" {
     
     # Deployment targets
     UNTRUSTED_INGRESS_IP = module.untrusted_ingress_host.private_ip
-    UNTRUSTED_INGRESS_PUBLIC_IP = module.untrusted_ingress_host.public_ip
+    UNTRUSTED_INGRESS_PUBLIC_IP = aws_eip.untrusted_ingress.public_ip  # Use EIP instead
     
     TRUSTED_SCRUB_IP = module.trusted_scrub_host.private_ip
     TRUSTED_STREAMING_IP = module.trusted_streaming_host.private_ip
@@ -127,7 +127,7 @@ output "ado_secrets" {
 output "untrusted_instance_ips" {
   description = "IP addresses for untrusted instances"
   value = {
-    ingress_public  = module.untrusted_ingress_host.public_ip
+    ingress_public  = aws_eip.untrusted_ingress.public_ip  # Use EIP instead
     ingress_private = module.untrusted_ingress_host.private_ip
     scrub_private   = module.untrusted_scrub_host.private_ip
     devops_public   = module.untrusted_devops_host.public_ip 
@@ -149,7 +149,7 @@ output "trusted_instance_ips" {
 # Elastic IP for Untrusted Ingress
 output "untrusted_ingress_elastic_ip" {
   description = "Static Elastic IP for untrusted ingress host"
-  value       = module.untrusted_ingress_host.public_ip
+  value       = aws_eip.untrusted_ingress.public_ip  # Use EIP instead
 }
 
 # VPC Peering Connection

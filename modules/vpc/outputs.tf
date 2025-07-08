@@ -47,9 +47,6 @@ output "private_subnet_ids" {
 output "private_subnets_by_name" {
   description = "Map of private subnets by name"
   value = {
-    # FIX: Iterate directly over the subnet resources to prevent index errors.
-    # This assumes var.private_subnet_names has the same number of elements
-    # and is in the same order as the created subnets.
     for i, subnet in aws_subnet.private : var.private_subnet_names[i] => {
       id         = subnet.id
       cidr_block = subnet.cidr_block

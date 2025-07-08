@@ -63,7 +63,7 @@ module "untrusted_ingress_host" {
   instance_type       = var.instance_types.untrusted_ingress
   subnet_id           = module.untrusted_vpc_streaming_ingress.public_subnets_by_name["ec2"].id
   vpc_id              = module.untrusted_vpc_streaming_ingress.vpc_id
-  associate_public_ip = true
+  associate_public_ip = false
   enable_ecr_access   = true
   custom_ami_id       = var.use_custom_amis ? var.custom_standard_ami_id : null
   allowed_ssh_cidrs   = [var.untrusted_vpn_client_cidr]
@@ -98,10 +98,9 @@ module "untrusted_scrub_host" {
   allowed_egress_udp_ports = [var.peering_udp_port]
   allowed_egress_udp_cidrs = [var.trusted_vpc_cidrs["streaming_scrub"]]
 
-  user_data = templatefile("${path.module}/templates/combined-scrub-userdata.sh", {
-    trusted_scrub_ip = module.trusted_scrub_host.private_ip
-    trusted_scrub_vpc_cidr = var.trusted_vpc_cidrs["streaming_scrub"]
-    aws_region             = var.primary_region
+  user_data = templatefile("${path.module}/templates/traffic-forward-scrub.sh", {
+    trusted_ip = module.trusted_scrub_host.private_ip
+    aws_region = var.primary_region
   })
 }
 
@@ -165,5 +164,3 @@ data "aws_iam_role" "untrusted_devops_host_role" {
   name  = "${var.project_name}-untrusted-devops-host-role"
   depends_on = [module.untrusted_devops_host]
 }
-
-# NOTE: ALL ECR-related policies have been moved to storage.tf
