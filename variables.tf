@@ -626,3 +626,106 @@ variable "streaming_rds_max_storage" {
   type        = number
   default     = 200
 }
+
+################################################################################
+# ECS Service Configuration Variables - Backend and Frontend Only
+################################################################################
+
+variable "streaming_services" {
+  description = "Configuration for streaming services - backend and frontend only"
+  type = object({
+    backend = object({
+      image_name       = string
+      container_port   = number
+      health_check_path = string
+      cpu             = number
+      memory          = number
+      desired_count   = number
+      priority        = number
+      path_patterns   = list(string)
+    })
+    frontend = object({
+      image_name       = string
+      container_port   = number
+      health_check_path = string
+      cpu             = number
+      memory          = number
+      desired_count   = number
+      priority        = number
+      path_patterns   = list(string)
+    })
+  })
+  
+  default = {
+    backend = {
+      image_name       = "streaming-backend"
+      container_port   = 8080
+      health_check_path = "/api/health"
+      cpu             = 1024
+      memory          = 2048
+      desired_count   = 2
+      priority        = 100
+      path_patterns   = ["/api/*"]
+    }
+    frontend = {
+      image_name       = "streaming-frontend"
+      container_port   = 3000
+      health_check_path = "/health"
+      cpu             = 512
+      memory          = 1024
+      desired_count   = 1
+      priority        = 200
+      path_patterns   = ["/", "/*"]
+    }
+  }
+}
+
+variable "streaming_image_tags" {
+  description = "Image tags for streaming services"
+  type = object({
+    backend  = string
+    frontend = string
+  })
+  
+  default = {
+    backend  = "latest"
+    frontend = "latest"
+  }
+}
+
+################################################################################
+# Auto Scaling Configuration - Backend and Frontend Only
+################################################################################
+
+variable "streaming_auto_scaling_config" {
+  description = "Auto scaling configuration for streaming services"
+  type = object({
+    backend = object({
+      min_capacity = number
+      max_capacity = number
+      cpu_target   = number
+      memory_target = number
+    })
+    frontend = object({
+      min_capacity = number
+      max_capacity = number
+      cpu_target   = number
+      memory_target = number
+    })
+  })
+  
+  default = {
+    backend = {
+      min_capacity = 1
+      max_capacity = 10
+      cpu_target   = 70
+      memory_target = 80
+    }
+    frontend = {
+      min_capacity = 1
+      max_capacity = 5
+      cpu_target   = 70
+      memory_target = 80
+    }
+  }
+}

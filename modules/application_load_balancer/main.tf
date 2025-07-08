@@ -1,4 +1,4 @@
-# modules/application_load_balancer/main.tf
+# modules/application_load_balancer/main.tf - FIXED
 terraform {
   required_providers {
     aws = {
@@ -47,7 +47,7 @@ resource "aws_lb_target_group" "ecs" {
   tags = var.tags
 }
 
-# HTTP Listener (redirect to HTTPS)
+# HTTP Listener (redirect to HTTPS) - FIXED
 resource "aws_lb_listener" "http" {
   count             = var.enable_http_listener ? 1 : 0
   load_balancer_arn = aws_lb.this.arn
@@ -65,7 +65,7 @@ resource "aws_lb_listener" "http" {
   }
 }
 
-# HTTPS Listener
+# HTTPS Listener - FIXED
 resource "aws_lb_listener" "https" {
   count             = var.certificate_arn != null ? 1 : 0
   load_balancer_arn = aws_lb.this.arn
@@ -85,7 +85,7 @@ resource "aws_lb_listener" "https" {
   }
 }
 
-# HTTP Listener (for internal ALBs without SSL)
+# HTTP Listener (for internal ALBs without SSL) - FIXED
 resource "aws_lb_listener" "http_internal" {
   count             = var.internal && var.certificate_arn == null ? 1 : 0
   load_balancer_arn = aws_lb.this.arn

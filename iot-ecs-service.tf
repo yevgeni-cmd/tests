@@ -16,7 +16,8 @@ resource "aws_ecs_task_definition" "iot_api" {
   container_definitions = jsonencode([
     {
       name  = "iot-api"
-      image = "${aws_ecr_repository.trusted_devops.repository_url}:iot-api-latest"
+      # FIXED: Use trusted_backend repository for IoT API
+      image = "${aws_ecr_repository.trusted_backend.repository_url}:iot-api-latest"
       
       essential = true
       
@@ -94,7 +95,7 @@ resource "aws_ecs_task_definition" "iot_api" {
   }
 }
 
-# IoT Dashboard Task Definition
+# IoT Dashboard Task Definition - FIXED ECR reference
 resource "aws_ecs_task_definition" "iot_dashboard" {
   provider                 = aws.primary
   family                   = "${var.project_name}-iot-dashboard"
@@ -108,7 +109,8 @@ resource "aws_ecs_task_definition" "iot_dashboard" {
   container_definitions = jsonencode([
     {
       name  = "iot-dashboard"
-      image = "${aws_ecr_repository.trusted_devops.repository_url}:iot-dashboard-latest"
+      # FIXED: Use trusted_frontend repository for IoT Dashboard
+      image = "${aws_ecr_repository.trusted_frontend.repository_url}:iot-dashboard-latest"
       
       essential = true
       

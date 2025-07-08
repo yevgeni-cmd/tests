@@ -319,6 +319,8 @@ resource "aws_security_group" "streaming_alb_sg" {
   }
 }
 
+# Simplified ALB configuration in stream-vpc-infrastructure.tf
+
 module "streaming_application_load_balancer" {
   source = "./modules/application_load_balancer"
   providers = { aws = aws.primary }
@@ -334,23 +336,23 @@ module "streaming_application_load_balancer" {
     module.trusted_vpc_streaming.private_subnets_by_name["alb-az-b"].id
   ]
   
-  # SSL Configuration
+  # SSL Configuration (optional)
   certificate_arn = var.streaming_alb_certificate_arn
   ssl_policy      = "ELBSecurityPolicy-TLS-1-2-2017-01"
   
   # Load balancer settings
   enable_deletion_protection        = false
-  enable_cross_zone_load_balancing = true  # For streaming, enable cross-zone
+  enable_cross_zone_load_balancing = true
   enable_http_listener             = true
   
-  # Target groups for streaming services
+  # FIXED: Target group names must match ECS service references
   target_groups = {
-    streaming_api = {
-      name              = "${var.project_name}-streaming-api-tg"
-      port              = 8080
+    streaming_backend = {  # ✅ Matches ECS service load_balancer reference
+      name              = "${var.project_name}-streaming-backend-tg"
+      port              = var.streaming_services.backend.container_port
       protocol          = "HTTP"
-      priority          = 100
-      path_patterns     = ["/api/*"]
+      priority          = var.streaming_services.backend.priority
+      path_patterns     = var.streaming_services.backend.path_patterns
       host_headers      = null
       health_check = {
         enabled             = true
@@ -358,18 +360,18 @@ module "streaming_application_load_balancer" {
         unhealthy_threshold = 3
         timeout             = 10
         interval            = 30
-        path               = "/api/health"
+        path               = var.streaming_services.backend.health_check_path
         matcher            = "200"
         protocol           = "HTTP"
       }
     }
     
-    streaming_control = {
-      name              = "${var.project_name}-streaming-control-tg"
-      port              = 3000
+    streaming_frontend = {  # ✅ Matches ECS service load_balancer reference
+      name              = "${var.project_name}-streaming-frontend-tg"
+      port              = var.streaming_services.frontend.container_port
       protocol          = "HTTP"
-      priority          = 200
-      path_patterns     = ["/control/*"]
+      priority          = var.streaming_services.frontend.priority
+      path_patterns     = var.streaming_services.frontend.path_patterns
       host_headers      = null
       health_check = {
         enabled             = true
@@ -377,27 +379,8 @@ module "streaming_application_load_balancer" {
         unhealthy_threshold = 3
         timeout             = 10
         interval            = 30
-        path               = "/control/health"
+        path               = var.streaming_services.frontend.health_check_path
         matcher            = "200"
-        protocol           = "HTTP"
-      }
-    }
-
-    streaming_player = {
-      name              = "${var.project_name}-streaming-player-tg"
-      port              = 8090
-      protocol          = "HTTP"
-      priority          = 300
-      path_patterns     = ["/player/*", "/hls/*", "/dash/*"]
-      host_headers      = null
-      health_check = {
-        enabled             = true
-        healthy_threshold   = 2
-        unhealthy_threshold = 3
-        timeout             = 5
-        interval            = 30
-        path               = "/player/health"
-        matcher            = "200,404"  # 404 is OK for player health check
         protocol           = "HTTP"
       }
     }
@@ -410,7 +393,7 @@ module "streaming_application_load_balancer" {
   tags = {
     Name        = "${var.project_name}-streaming-alb"
     Environment = var.environment_tags.trusted
-    Purpose     = "Video Streaming Services Access"
+    Purpose     = "Streaming Backend and Frontend Access"
   }
 }
 
@@ -445,16 +428,29 @@ resource "aws_security_group" "streaming_ecs_services_sg" {
     ]
   }
 
-  # FIXED: Allow RTMP streaming from VPN clients AND DevOps VPC (due to SNAT)
-  ingress {
-    description = "RTMP from VPN clients and DevOps VPC"
-    from_port   = 1935
-    to_port     = 1935
+  egress {
+    description = "HTTPS for ECR, Secrets Manager, and AWS services"
+    from_port   = 443
+    to_port     = 443
     protocol    = "tcp"
-    cidr_blocks = [
-      var.trusted_vpn_client_cidr,           # Original VPN client CIDR
-      var.trusted_vpc_cidrs["devops"]        # DevOps VPC CIDR (SNAT source)
-    ]
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # ADD THIS RULE - DNS lookups
+  egress {
+    description = "DNS lookups"
+    from_port   = 53
+    to_port     = 53
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    description = "DNS lookups UDP"
+    from_port   = 53
+    to_port     = 53
+    protocol    = "udp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   # FIXED: Allow UDP for streaming protocols from VPN clients AND DevOps VPC (due to SNAT)

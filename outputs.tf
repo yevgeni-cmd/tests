@@ -260,7 +260,6 @@ output "iot_alb_info" {
 }
 
 
-
 # Streaming Infrastructure Outputs
 output "streaming_infrastructure" {
   description = "Streaming infrastructure deployment information"
@@ -292,76 +291,40 @@ output "streaming_infrastructure" {
 
 # Enhanced deployment targets with streaming services
 output "streaming_deployment_targets" {
-  description = "Streaming service deployment targets for CI/CD"
+  description = "Streaming services deployment targets for CI/CD"
   value = {
     streaming_services = {
-      api_service = {
+      backend_service = {
         cluster_name = module.streaming_ecs_cluster.cluster_name
-        service_name = aws_ecs_service.streaming_api.name
-        task_definition = aws_ecs_task_definition.streaming_api.family
+        service_name = aws_ecs_service.streaming_backend.name
+        task_definition = aws_ecs_task_definition.streaming_backend.family
         environment = var.environment_tags.trusted
         alb_endpoint = module.streaming_application_load_balancer.alb_dns_name
-        container_port = 8080
+        target_group_arn = module.streaming_application_load_balancer.target_group_arns["streaming_backend"]
       }
-      
-      control_service = {
+      frontend_service = {
         cluster_name = module.streaming_ecs_cluster.cluster_name
-        service_name = aws_ecs_service.streaming_control.name
-        task_definition = aws_ecs_task_definition.streaming_control.family
+        service_name = aws_ecs_service.streaming_frontend.name
+        task_definition = aws_ecs_task_definition.streaming_frontend.family
         environment = var.environment_tags.trusted
         alb_endpoint = module.streaming_application_load_balancer.alb_dns_name
-        container_port = 3000
+        target_group_arn = module.streaming_application_load_balancer.target_group_arns["streaming_frontend"]
       }
-      
-      player_service = {
-        cluster_name = module.streaming_ecs_cluster.cluster_name
-        service_name = aws_ecs_service.streaming_player.name
-        task_definition = aws_ecs_task_definition.streaming_player.family
-        environment = var.environment_tags.trusted
-        alb_endpoint = module.streaming_application_load_balancer.alb_dns_name
-        container_port = 8090
-        rtmp_port = 1935
-      }
+    }
+    database = {
+      endpoint = module.streaming_rds_database.db_instance_endpoint
+      port = module.streaming_rds_database.db_instance_port
+      secret_arn = module.streaming_rds_database.master_user_secret_arn
+    }
+    messaging = {
+      video_queue_url = module.streaming_video_queue.queue_url
+      transcoding_queue_url = module.streaming_transcoding_queue.queue_url
+      analytics_queue_url = module.streaming_analytics_queue.queue_url
     }
   }
 }
 
-# Streaming Queue Information
-output "streaming_messaging" {
-  description = "Streaming queue configuration for applications"
-  value = {
-    # Queue URLs
-    video_processing_queue_url = module.streaming_video_queue.queue_url
-    transcoding_results_queue_url = module.streaming_transcoding_queue.queue_url
-    analytics_events_queue_url = module.streaming_analytics_queue.queue_url
-    
-    # Queue details for application configuration
-    queues = {
-      video_processing = {
-        name = module.streaming_video_queue.queue_name
-        arn = module.streaming_video_queue.queue_arn
-        url = module.streaming_video_queue.queue_url
-        dlq_arn = module.streaming_video_queue.dlq_arn
-      }
-      transcoding_results = {
-        name = module.streaming_transcoding_queue.queue_name
-        arn = module.streaming_transcoding_queue.queue_arn
-        url = module.streaming_transcoding_queue.queue_url
-        dlq_arn = module.streaming_transcoding_queue.dlq_arn
-      }
-      analytics_events = {
-        name = module.streaming_analytics_queue.queue_name
-        arn = module.streaming_analytics_queue.queue_arn
-        url = module.streaming_analytics_queue.queue_url
-        dlq_arn = module.streaming_analytics_queue.dlq_arn
-      }
-    }
-    
-    region = var.primary_region
-  }
-}
-
-# Streaming Performance Metrics
+# Streaming Performance Metrics - FIXED
 output "streaming_monitoring" {
   description = "Streaming infrastructure monitoring endpoints"
   value = {
@@ -369,11 +332,10 @@ output "streaming_monitoring" {
     ecs_log_group = module.streaming_ecs_cluster.log_group_name
     alb_log_group = module.streaming_application_load_balancer.alb_arn
     
-    # Auto-scaling targets
+    # Auto-scaling targets - FIXED to use correct resource names
     auto_scaling_targets = {
-      streaming_api = aws_appautoscaling_target.streaming_api.resource_id
-      streaming_control = aws_appautoscaling_target.streaming_control.resource_id
-      streaming_player = aws_appautoscaling_target.streaming_player.resource_id
+      streaming_backend = aws_appautoscaling_target.streaming_backend.resource_id
+      streaming_frontend = aws_appautoscaling_target.streaming_frontend.resource_id
     }
     
     # Key metrics to monitor
@@ -386,7 +348,7 @@ output "streaming_monitoring" {
   }
 }
 
-# Complete infrastructure summary including both IoT and Streaming
+# Complete infrastructure summary including both IoT and Streaming - UPDATED
 output "complete_infrastructure_summary" {
   description = "Complete infrastructure deployment summary"
   value = {
@@ -398,12 +360,10 @@ output "complete_infrastructure_summary" {
       message_queue = module.jacob_sqs_queues.queue_url
     }
     
-    # Video Streaming Platform  
+    # Video Streaming Platform - UPDATED for backend/frontend
     streaming_platform = {
-      api_endpoint = "http://${module.streaming_application_load_balancer.alb_dns_name}/api"
-      control_endpoint = "http://${module.streaming_application_load_balancer.alb_dns_name}/control"
-      player_endpoint = "http://${module.streaming_application_load_balancer.alb_dns_name}/player"
-      rtmp_endpoint = "rtmp://${module.streaming_application_load_balancer.alb_dns_name}/live"
+      backend_endpoint = "http://${module.streaming_application_load_balancer.alb_dns_name}/api"
+      frontend_endpoint = "http://${module.streaming_application_load_balancer.alb_dns_name}/"
       database_endpoint = module.streaming_rds_database.db_instance_endpoint
     }
     
@@ -414,6 +374,6 @@ output "complete_infrastructure_summary" {
     }
     
     # Infrastructure Status
-    deployment_status = "Complete - IoT Management + Video Streaming Platform Ready"
+    deployment_status = "Complete - IoT Management + Streaming Platform (Backend/Frontend) Ready"
   }
 }

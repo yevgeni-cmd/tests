@@ -129,3 +129,84 @@ streaming_rds_engine            = "postgres"      # Different engine for streami
 streaming_rds_engine_version    = "17.4"          # FIXED: Valid PostgreSQL version
 streaming_rds_allocated_storage = 50              # More storage for streaming data
 streaming_rds_max_storage      = 200             # Higher max storage
+
+
+# ----------------------------------------------------------------
+# STREAMING SERVICES CONFIGURATION - Backend and Frontend Only
+# ----------------------------------------------------------------
+
+# --- Streaming Services Configuration ---
+streaming_services = {
+  backend = {
+    image_name       = "streaming-backend"      # Maps to trusted-backend-images ECR
+    container_port   = 8080
+    health_check_path = "/api/health"
+    cpu             = 1024
+    memory          = 2048
+    desired_count   = 2
+    priority        = 100
+    path_patterns   = ["/api/*"]
+  }
+  frontend = {
+    image_name       = "streaming-frontend"     # Maps to trusted-frontend-images ECR
+    container_port   = 3000
+    health_check_path = "/health"
+    cpu             = 512
+    memory          = 1024
+    desired_count   = 1
+    priority        = 200
+    path_patterns   = ["/", "/*"]               # Catch-all for frontend
+  }
+}
+
+# --- Image Tags for Deployment ---
+streaming_image_tags = {
+  backend  = "streaming-backend-latest"
+  frontend = "streaming-frontend-latest"  
+}
+
+# --- Auto Scaling Configuration ---
+streaming_auto_scaling_config = {
+  backend = {
+    min_capacity = 1
+    max_capacity = 10
+    cpu_target   = 70      # Scale when CPU > 70%
+    memory_target = 80     # Scale when Memory > 80%
+  }
+  frontend = {
+    min_capacity = 1
+    max_capacity = 5
+    cpu_target   = 70
+    memory_target = 80
+  }
+}
+
+# ----------------------------------------------------------------
+# DEPLOYMENT WORKFLOW
+# ----------------------------------------------------------------
+
+# 1. Build and push your images:
+#    docker build -t streaming-backend ./backend
+#    docker tag streaming-backend:latest $ECR_REGISTRY/poc/trusted-backend-images:v1.0.0
+#    docker push $ECR_REGISTRY/poc/trusted-backend-images:v1.0.0
+#
+#    docker build -t streaming-frontend ./frontend
+#    docker tag streaming-frontend:latest $ECR_REGISTRY/poc/trusted-frontend-images:v1.0.0
+#    docker push $ECR_REGISTRY/poc/trusted-frontend-images:v1.0.0
+
+# 2. Update image tags above when deploying new versions
+
+# 3. Apply changes:
+#    terraform apply -var-file=terraform.tfvars
+
+# ----------------------------------------------------------------
+# ACCESS ENDPOINTS
+# ----------------------------------------------------------------
+# Backend API:  http://streaming-alb-dns/api/*    -> Backend:8080
+# Frontend:     http://streaming-alb-dns/*        -> Frontend:3000
+
+# ----------------------------------------------------------------
+# ECR REPOSITORY MAPPING
+# ----------------------------------------------------------------
+# streaming-backend  -> poc/trusted-backend-images
+# streaming-frontend -> poc/trusted-frontend-images

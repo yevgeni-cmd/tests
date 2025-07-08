@@ -58,7 +58,7 @@ module "trusted_vpc_streaming" {
     "alb-az-b"          # ALB subnet in AZ-b
   ]
   
-  vpc_endpoints = ["ecr.api", "ecr.dkr", "s3", "sqs"]
+  vpc_endpoints = ["ecr.api", "ecr.dkr", "s3", "sqs", "secretsmanager"]
 }
 
 module "trusted_vpc_jacob" {

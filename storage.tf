@@ -1,10 +1,11 @@
+# Fixed storage.tf - Add the missing ECR repositories that are referenced throughout the project
+
 # =================================================================
 # ECR (Elastic Container Registry) Repositories
 # Defines private Docker image repositories for each service
 # =================================================================
 
 # --- Untrusted Environment Repository ---
-
 resource "aws_ecr_repository" "untrusted_devops" {
   name                 = "${var.project_name}/untrusted-devops-images"
   image_tag_mutability = "MUTABLE"
@@ -20,8 +21,7 @@ resource "aws_ecr_repository" "untrusted_devops" {
   }
 }
 
-# --- Trusted Environment Repository ---
-
+# --- Trusted Environment Repositories ---
 resource "aws_ecr_repository" "trusted_devops" {
   name                 = "${var.project_name}/trusted-devops-images"
   image_tag_mutability = "MUTABLE"
@@ -48,9 +48,10 @@ resource "aws_ecr_repository" "trusted_backend" {
   tags = {
     Environment = var.environment_tags.trusted
     Project     = var.project_name
-    Purpose     = "CI/CD Images"
+    Purpose     = "Backend Service Images"
   }
 }
+
 resource "aws_ecr_repository" "trusted_frontend" {
   name                 = "${var.project_name}/trusted-frontend-images"
   image_tag_mutability = "MUTABLE"
@@ -62,12 +63,12 @@ resource "aws_ecr_repository" "trusted_frontend" {
   tags = {
     Environment = var.environment_tags.trusted
     Project     = var.project_name
-    Purpose     = "CI/CD Images"
+    Purpose     = "Frontend Service Images"
   }
 }
 
 # =================================================================
-# ECR Repository Policies
+# ECR Repository Policies - Enhanced for Multiple Repositories
 # Grants proper access for CI/CD and deployment workflows
 # =================================================================
 
@@ -111,11 +112,6 @@ data "aws_iam_policy_document" "untrusted_devops_policy" {
   }
 }
 
-resource "aws_ecr_repository_policy" "untrusted_devops" {
-  repository = aws_ecr_repository.untrusted_devops.name
-  policy     = data.aws_iam_policy_document.untrusted_devops_policy.json
-}
-
 # --- Trusted DevOps Repository Policy ---
 data "aws_iam_policy_document" "trusted_devops_policy" {
   # Allow trusted DevOps host (CI/CD and deployment)
@@ -154,6 +150,30 @@ data "aws_iam_policy_document" "trusted_devops_policy" {
       "ecr:BatchCheckLayerAvailability"
     ]
   }
+
+  # Allow ECS task execution role (for Fargate)
+  statement {
+    sid    = "AllowECSTaskExecution"
+    effect = "Allow"
+    principals {
+      type        = "AWS"
+      identifiers = [
+        module.iot_ecs_cluster.execution_role_arn,
+        module.streaming_ecs_cluster.execution_role_arn
+      ]
+    }
+    actions = [
+      "ecr:GetDownloadUrlForLayer",
+      "ecr:BatchGetImage",
+      "ecr:BatchCheckLayerAvailability"
+    ]
+  }
+}
+
+# Apply policies to repositories
+resource "aws_ecr_repository_policy" "untrusted_devops" {
+  repository = aws_ecr_repository.untrusted_devops.name
+  policy     = data.aws_iam_policy_document.untrusted_devops_policy.json
 }
 
 resource "aws_ecr_repository_policy" "trusted_devops" {
@@ -161,12 +181,19 @@ resource "aws_ecr_repository_policy" "trusted_devops" {
   policy     = data.aws_iam_policy_document.trusted_devops_policy.json
 }
 
-# =================================================================
-# IAM ROLE POLICIES FOR EC2 INSTANCES (ALL ECR ACCESS)
-# These attach to the IAM roles created by the EC2 modules
-# =================================================================
+resource "aws_ecr_repository_policy" "trusted_backend" {
+  repository = aws_ecr_repository.trusted_backend.name
+  policy     = data.aws_iam_policy_document.trusted_devops_policy.json
+}
 
-# --- UNTRUSTED ENVIRONMENT ECR ACCESS ---
+resource "aws_ecr_repository_policy" "trusted_frontend" {
+  repository = aws_ecr_repository.trusted_frontend.name
+  policy     = data.aws_iam_policy_document.trusted_devops_policy.json
+}
+
+# =================================================================
+# IAM ROLE POLICIES FOR EC2 INSTANCES - Enhanced ECR Access
+# =================================================================
 
 # Enhanced ECR access for untrusted DevOps host
 resource "aws_iam_role_policy" "untrusted_devops_ecr_access" {
@@ -198,7 +225,6 @@ resource "aws_iam_role_policy" "untrusted_devops_ecr_access" {
           "ecr:CompleteLayerUpload",
           "ecr:PutImage"
         ]
-        # REVERTED: This role can ONLY access the untrusted repository.
         Resource = [
           aws_ecr_repository.untrusted_devops.arn
         ]
@@ -207,6 +233,48 @@ resource "aws_iam_role_policy" "untrusted_devops_ecr_access" {
   })
 
   depends_on = [module.untrusted_devops_host]
+}
+
+# Enhanced ECR access for trusted DevOps host - ALL REPOSITORIES
+resource "aws_iam_role_policy" "trusted_devops_ecr_access" {
+  name = "enhanced-ecr-access"
+  role = split("/", module.trusted_devops_host.iam_role_arn)[1]
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:GetAuthorizationToken"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+          "ecr:DescribeRepositories",
+          "ecr:ListImages",
+          "ecr:DescribeImages",
+          "ecr:BatchDeleteImage",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload",
+          "ecr:PutImage"
+        ]
+        Resource = [
+          aws_ecr_repository.trusted_devops.arn,
+          aws_ecr_repository.trusted_backend.arn,
+          aws_ecr_repository.trusted_frontend.arn
+        ]
+      }
+    ]
+  })
+
+  depends_on = [module.trusted_devops_host]
 }
 
 # ECR access for untrusted ingress host
@@ -273,49 +341,7 @@ resource "aws_iam_role_policy" "untrusted_scrub_ecr_access" {
   depends_on = [module.untrusted_scrub_host]
 }
 
-# --- TRUSTED ENVIRONMENT ECR ACCESS ---
-
-# Enhanced ECR access for trusted DevOps host
-resource "aws_iam_role_policy" "trusted_devops_ecr_access" {
-  name = "enhanced-ecr-access"
-  role = split("/", module.trusted_devops_host.iam_role_arn)[1]
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "ecr:GetAuthorizationToken"
-        ]
-        Resource = "*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "ecr:BatchCheckLayerAvailability",
-          "ecr:GetDownloadUrlForLayer",
-          "ecr:BatchGetImage",
-          "ecr:DescribeRepositories",
-          "ecr:ListImages",
-          "ecr:DescribeImages",
-          "ecr:BatchDeleteImage",
-          "ecr:InitiateLayerUpload",
-          "ecr:UploadLayerPart",
-          "ecr:CompleteLayerUpload",
-          "ecr:PutImage"
-        ]
-        Resource = [
-          aws_ecr_repository.trusted_devops.arn
-        ]
-      }
-    ]
-  })
-
-  depends_on = [module.trusted_devops_host]
-}
-
-# ECR access for trusted scrub host
+# Enhanced ECR access for trusted scrub host - READ access to all repositories
 resource "aws_iam_role_policy" "trusted_scrub_ecr_access" {
   name = "scrub-ecr-access"
   role = split("/", module.trusted_scrub_host.iam_role_arn)[1]
@@ -338,7 +364,9 @@ resource "aws_iam_role_policy" "trusted_scrub_ecr_access" {
           "ecr:BatchGetImage"
         ]
         Resource = [
-          aws_ecr_repository.trusted_devops.arn
+          aws_ecr_repository.trusted_devops.arn,
+          aws_ecr_repository.trusted_backend.arn,
+          aws_ecr_repository.trusted_frontend.arn
         ]
       }
     ]
@@ -347,7 +375,7 @@ resource "aws_iam_role_policy" "trusted_scrub_ecr_access" {
   depends_on = [module.trusted_scrub_host]
 }
 
-# ECR access for trusted streaming host
+# Enhanced ECR access for trusted streaming host - READ access to all repositories
 resource "aws_iam_role_policy" "trusted_streaming_ecr_access" {
   name = "streaming-ecr-access"
   role = split("/", module.trusted_streaming_host.iam_role_arn)[1]
@@ -370,7 +398,9 @@ resource "aws_iam_role_policy" "trusted_streaming_ecr_access" {
           "ecr:BatchGetImage"
         ]
         Resource = [
-          aws_ecr_repository.trusted_devops.arn
+          aws_ecr_repository.trusted_devops.arn,
+          aws_ecr_repository.trusted_backend.arn,
+          aws_ecr_repository.trusted_frontend.arn
         ]
       }
     ]
@@ -379,7 +409,7 @@ resource "aws_iam_role_policy" "trusted_streaming_ecr_access" {
   depends_on = [module.trusted_streaming_host]
 }
 
-# Enhanced ECS permissions for trusted DevOps host (to manage ECS)
+# Enhanced ECS permissions for trusted DevOps host (to manage ECS services)
 resource "aws_iam_role_policy" "trusted_devops_ecs_management" {
   name = "ecs-management-access"
   role = split("/", module.trusted_devops_host.iam_role_arn)[1]
@@ -396,7 +426,10 @@ resource "aws_iam_role_policy" "trusted_devops_ecs_management" {
           "logs:CreateLogStream",
           "logs:PutLogEvents",
           "logs:DescribeLogGroups",
-          "logs:DescribeLogStreams"
+          "logs:DescribeLogStreams",
+          "elasticloadbalancing:DescribeTargetGroups",
+          "elasticloadbalancing:DescribeLoadBalancers",
+          "elasticloadbalancing:ModifyTargetGroup"
         ]
         Resource = "*"
       },
@@ -407,11 +440,17 @@ resource "aws_iam_role_policy" "trusted_devops_ecs_management" {
         ]
         Resource = [
           module.iot_ecs_cluster.execution_role_arn,
-          module.iot_ecs_cluster.task_role_arn
+          module.iot_ecs_cluster.task_role_arn,
+          module.streaming_ecs_cluster.execution_role_arn,
+          module.streaming_ecs_cluster.task_role_arn
         ]
       }
     ]
   })
 
-  depends_on = [module.trusted_devops_host, module.iot_ecs_cluster]
+  depends_on = [
+    module.trusted_devops_host, 
+    module.iot_ecs_cluster,
+    module.streaming_ecs_cluster
+  ]
 }

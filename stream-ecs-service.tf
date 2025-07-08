@@ -1,40 +1,85 @@
 ################################################################################
-# ECS Task Definitions for Streaming Services
+# ECS Task Definitions - Backend and Frontend Only - FIXED
 ################################################################################
 
-# Streaming API Service Task Definition
-resource "aws_ecs_task_definition" "streaming_api" {
+# Locals for building dynamic configurations
+locals {
+  # Build ECR URLs for each service
+  streaming_ecr_urls = {
+    backend  = "${aws_ecr_repository.trusted_backend.repository_url}:${var.streaming_image_tags.backend}"
+    frontend = "${aws_ecr_repository.trusted_frontend.repository_url}:${var.streaming_image_tags.frontend}"
+  }
+  
+  # Environment variables for all services - UPDATED with DB info
+  common_environment = [
+    {
+      name  = "NODE_ENV"
+      value = "production"
+    },
+    {
+      name  = "AWS_REGION"
+      value = var.primary_region
+    },
+    {
+      name  = "PROJECT_NAME"
+      value = var.project_name
+    },
+    {
+      name  = "DB_HOST"
+      value = module.streaming_rds_database.db_instance_endpoint
+    },
+    {
+      name  = "DB_NAME"
+      value = module.streaming_rds_database.db_instance_name
+    }
+  ]
+  
+  # Common secrets for database access - FIXED to only include what exists
+  common_secrets = [
+    {
+      name      = "DB_USERNAME"
+      valueFrom = "${module.streaming_rds_database.master_user_secret_arn}:username::"
+    },
+    {
+      name      = "DB_PASSWORD"
+      valueFrom = "${module.streaming_rds_database.master_user_secret_arn}:password::"
+    }
+  ]
+}
+
+# Backend API Service Task Definition
+resource "aws_ecs_task_definition" "streaming_backend" {
   provider                 = aws.primary
-  family                   = "${var.project_name}-streaming-api"
+  family                   = "${var.project_name}-streaming-backend"
   network_mode            = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                     = var.streaming_task_cpu
-  memory                  = var.streaming_task_memory
+  cpu                     = var.streaming_services.backend.cpu
+  memory                  = var.streaming_services.backend.memory
   execution_role_arn      = module.streaming_ecs_cluster.execution_role_arn
   task_role_arn          = module.streaming_ecs_cluster.task_role_arn
 
   container_definitions = jsonencode([
     {
-      name  = "streaming-api"
-      image = "${aws_ecr_repository.trusted_devops.repository_url}:streaming-api-latest"
+      name  = "streaming-backend"
+      image = local.streaming_ecr_urls.backend
       
       essential = true
       
       portMappings = [
         {
-          containerPort = 8080
+          containerPort = var.streaming_services.backend.container_port
           protocol      = "tcp"
         }
       ]
       
-      environment = [
-        {
-          name  = "NODE_ENV"
-          value = "production"
-        },
+      environment = concat(local.common_environment, [
         {
           name  = "PORT"
-          value = "8080"
+          value = tostring(var.streaming_services.backend.container_port)
+        },
+        {
+          name  = "SERVICE_TYPE"
+          value = "backend-api"
         },
         {
           name  = "VIDEO_QUEUE_URL"
@@ -48,40 +93,23 @@ resource "aws_ecs_task_definition" "streaming_api" {
           name  = "ANALYTICS_QUEUE_URL"
           value = module.streaming_analytics_queue.queue_url
         }
-      ]
+      ])
       
-      secrets = [
-        {
-          name      = "DB_HOST"
-          valueFrom = "${module.streaming_rds_database.master_user_secret_arn}:endpoint::"
-        },
-        {
-          name      = "DB_USERNAME"
-          valueFrom = "${module.streaming_rds_database.master_user_secret_arn}:username::"
-        },
-        {
-          name      = "DB_PASSWORD"
-          valueFrom = "${module.streaming_rds_database.master_user_secret_arn}:password::"
-        },
-        {
-          name      = "DB_NAME"
-          valueFrom = "${module.streaming_rds_database.master_user_secret_arn}:dbname::"
-        }
-      ]
+      secrets = local.common_secrets
       
       logConfiguration = {
         logDriver = "awslogs"
         options = {
           "awslogs-group"         = module.streaming_ecs_cluster.log_group_name
           "awslogs-region"        = var.primary_region
-          "awslogs-stream-prefix" = "streaming-api"
+          "awslogs-stream-prefix" = "streaming-backend"
         }
       }
       
       healthCheck = {
         command = [
           "CMD-SHELL",
-          "curl -f http://localhost:8080/api/health || exit 1"
+          "curl -f http://localhost:${var.streaming_services.backend.container_port}${var.streaming_services.backend.health_check_path} || exit 1"
         ]
         interval    = 30
         timeout     = 5
@@ -92,69 +120,65 @@ resource "aws_ecs_task_definition" "streaming_api" {
   ])
 
   tags = {
-    Name        = "${var.project_name}-streaming-api-task"
+    Name        = "${var.project_name}-streaming-backend-task"
     Environment = var.environment_tags.trusted
-    Service     = "streaming-api"
+    Service     = "streaming-backend"
   }
 }
 
-# Streaming Control Panel Task Definition
-resource "aws_ecs_task_definition" "streaming_control" {
+# Frontend Service Task Definition
+resource "aws_ecs_task_definition" "streaming_frontend" {
   provider                 = aws.primary
-  family                   = "${var.project_name}-streaming-control"
+  family                   = "${var.project_name}-streaming-frontend"
   network_mode            = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                     = var.streaming_task_cpu
-  memory                  = var.streaming_task_memory
+  cpu                     = var.streaming_services.frontend.cpu
+  memory                  = var.streaming_services.frontend.memory
   execution_role_arn      = module.streaming_ecs_cluster.execution_role_arn
   task_role_arn          = module.streaming_ecs_cluster.task_role_arn
 
   container_definitions = jsonencode([
     {
-      name  = "streaming-control"
-      image = "${aws_ecr_repository.trusted_devops.repository_url}:streaming-control-latest"
+      name  = "streaming-frontend"
+      image = local.streaming_ecr_urls.frontend
       
       essential = true
       
       portMappings = [
         {
-          containerPort = 3000
+          containerPort = var.streaming_services.frontend.container_port
           protocol      = "tcp"
         }
       ]
       
-      environment = [
-        {
-          name  = "NODE_ENV"
-          value = "production"
-        },
+      environment = concat(local.common_environment, [
         {
           name  = "PORT"
-          value = "3000"
+          value = tostring(var.streaming_services.frontend.container_port)
         },
         {
-          name  = "STREAMING_API_URL"
-          value = "http://localhost:8080/api"
+          name  = "SERVICE_TYPE"
+          value = "frontend"
         },
         {
-          name  = "PLAYER_BASE_URL"
-          value = "http://localhost:8090"
+          name  = "API_BASE_URL"
+          value = "http://localhost:${var.streaming_services.backend.container_port}/api"
         }
-      ]
+      ])
       
       logConfiguration = {
         logDriver = "awslogs"
         options = {
           "awslogs-group"         = module.streaming_ecs_cluster.log_group_name
           "awslogs-region"        = var.primary_region
-          "awslogs-stream-prefix" = "streaming-control"
+          "awslogs-stream-prefix" = "streaming-frontend"
         }
       }
       
       healthCheck = {
         command = [
           "CMD-SHELL",
-          "curl -f http://localhost:3000/control/health || exit 1"
+          "curl -f http://localhost:${var.streaming_services.frontend.container_port}${var.streaming_services.frontend.health_check_path} || exit 1"
         ]
         interval    = 30
         timeout     = 5
@@ -165,107 +189,23 @@ resource "aws_ecs_task_definition" "streaming_control" {
   ])
 
   tags = {
-    Name        = "${var.project_name}-streaming-control-task"
+    Name        = "${var.project_name}-streaming-frontend-task"
     Environment = var.environment_tags.trusted
-    Service     = "streaming-control"
-  }
-}
-
-# Video Player/Streaming Engine Task Definition
-resource "aws_ecs_task_definition" "streaming_player" {
-  provider                 = aws.primary
-  family                   = "${var.project_name}-streaming-player"
-  network_mode            = "awsvpc"
-  requires_compatibilities = ["FARGATE"]
-  cpu                     = var.streaming_player_cpu    # Higher CPU for video processing
-  memory                  = var.streaming_player_memory # Higher memory for video processing
-  execution_role_arn      = module.streaming_ecs_cluster.execution_role_arn
-  task_role_arn          = module.streaming_ecs_cluster.task_role_arn
-
-  container_definitions = jsonencode([
-    {
-      name  = "streaming-player"
-      image = "${aws_ecr_repository.trusted_devops.repository_url}:streaming-player-latest"
-      
-      essential = true
-      
-      portMappings = [
-        {
-          containerPort = 8090
-          protocol      = "tcp"
-        },
-        {
-          containerPort = 1935  # RTMP
-          protocol      = "tcp"
-        }
-      ]
-      
-      environment = [
-        {
-          name  = "NODE_ENV"
-          value = "production"
-        },
-        {
-          name  = "HTTP_PORT"
-          value = "8090"
-        },
-        {
-          name  = "RTMP_PORT"
-          value = "1935"
-        },
-        {
-          name  = "VIDEO_PROCESSING_QUEUE_URL"
-          value = module.streaming_video_queue.queue_url
-        },
-        {
-          name  = "RESULTS_QUEUE_URL"
-          value = module.streaming_transcoding_queue.queue_url
-        }
-      ]
-      
-      # Mount points for video storage (if using EFS)
-      mountPoints = []
-      
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          "awslogs-group"         = module.streaming_ecs_cluster.log_group_name
-          "awslogs-region"        = var.primary_region
-          "awslogs-stream-prefix" = "streaming-player"
-        }
-      }
-      
-      healthCheck = {
-        command = [
-          "CMD-SHELL",
-          "curl -f http://localhost:8090/player/health || exit 1"
-        ]
-        interval    = 30
-        timeout     = 10
-        retries     = 3
-        startPeriod = 120  # Longer startup time for video processing
-      }
-    }
-  ])
-
-  tags = {
-    Name        = "${var.project_name}-streaming-player-task"
-    Environment = var.environment_tags.trusted
-    Service     = "streaming-player"
+    Service     = "streaming-frontend"
   }
 }
 
 ################################################################################
-# ECS Services for Streaming Platform
+# ECS Services - Backend and Frontend Only
 ################################################################################
 
-# Streaming API Service
-resource "aws_ecs_service" "streaming_api" {
+# Backend Service
+resource "aws_ecs_service" "streaming_backend" {
   provider        = aws.primary
-  name            = "${var.project_name}-streaming-api-service"
+  name            = "${var.project_name}-streaming-backend-service"
   cluster         = module.streaming_ecs_cluster.cluster_id
-  task_definition = aws_ecs_task_definition.streaming_api.arn
-  desired_count   = var.streaming_desired_count
+  task_definition = aws_ecs_task_definition.streaming_backend.arn
+  desired_count   = var.streaming_services.backend.desired_count
   launch_type     = "FARGATE"
   platform_version = "LATEST"
   
@@ -276,9 +216,9 @@ resource "aws_ecs_service" "streaming_api" {
   }
   
   load_balancer {
-    target_group_arn = module.streaming_application_load_balancer.target_group_arns["streaming_api"]
-    container_name   = "streaming-api"
-    container_port   = 8080
+    target_group_arn = module.streaming_application_load_balancer.target_group_arns["streaming_backend"]
+    container_name   = "streaming-backend"
+    container_port   = var.streaming_services.backend.container_port
   }
   
   deployment_controller {
@@ -294,23 +234,23 @@ resource "aws_ecs_service" "streaming_api" {
   
   depends_on = [
     module.streaming_application_load_balancer,
-    aws_ecs_task_definition.streaming_api
+    aws_ecs_task_definition.streaming_backend
   ]
 
   tags = {
-    Name        = "${var.project_name}-streaming-api-service"
+    Name        = "${var.project_name}-streaming-backend-service"
     Environment = var.environment_tags.trusted
-    Service     = "streaming-api"
+    Service     = "streaming-backend"
   }
 }
 
-# Streaming Control Service
-resource "aws_ecs_service" "streaming_control" {
+# Frontend Service
+resource "aws_ecs_service" "streaming_frontend" {
   provider        = aws.primary
-  name            = "${var.project_name}-streaming-control-service"
+  name            = "${var.project_name}-streaming-frontend-service"
   cluster         = module.streaming_ecs_cluster.cluster_id
-  task_definition = aws_ecs_task_definition.streaming_control.arn
-  desired_count   = var.streaming_desired_count
+  task_definition = aws_ecs_task_definition.streaming_frontend.arn
+  desired_count   = var.streaming_services.frontend.desired_count
   launch_type     = "FARGATE"
   platform_version = "LATEST"
   
@@ -321,9 +261,9 @@ resource "aws_ecs_service" "streaming_control" {
   }
   
   load_balancer {
-    target_group_arn = module.streaming_application_load_balancer.target_group_arns["streaming_control"]
-    container_name   = "streaming-control"
-    container_port   = 3000
+    target_group_arn = module.streaming_application_load_balancer.target_group_arns["streaming_frontend"]
+    container_name   = "streaming-frontend"
+    container_port   = var.streaming_services.frontend.container_port
   }
   
   deployment_controller {
@@ -339,270 +279,66 @@ resource "aws_ecs_service" "streaming_control" {
   
   depends_on = [
     module.streaming_application_load_balancer,
-    aws_ecs_task_definition.streaming_control
+    aws_ecs_task_definition.streaming_frontend
   ]
 
   tags = {
-    Name        = "${var.project_name}-streaming-control-service"
+    Name        = "${var.project_name}-streaming-frontend-service"
     Environment = var.environment_tags.trusted
-    Service     = "streaming-control"
-  }
-}
-
-# Streaming Player Service
-resource "aws_ecs_service" "streaming_player" {
-  provider        = aws.primary
-  name            = "${var.project_name}-streaming-player-service"
-  cluster         = module.streaming_ecs_cluster.cluster_id
-  task_definition = aws_ecs_task_definition.streaming_player.arn
-  desired_count   = var.streaming_player_desired_count
-  launch_type     = "FARGATE"
-  platform_version = "LATEST"
-  
-  network_configuration {
-    subnets         = [module.trusted_vpc_streaming.private_subnets_by_name["ecs-containers"].id]
-    security_groups = [aws_security_group.streaming_ecs_services_sg.id]
-    assign_public_ip = false
-  }
-  
-  load_balancer {
-    target_group_arn = module.streaming_application_load_balancer.target_group_arns["streaming_player"]
-    container_name   = "streaming-player"
-    container_port   = 8090
-  }
-  
-  deployment_controller {
-    type = "ECS"
-  }
-  
-  deployment_circuit_breaker {
-    enable   = true
-    rollback = true
-  }
-  
-  enable_execute_command = true
-  
-  depends_on = [
-    module.streaming_application_load_balancer,
-    aws_ecs_task_definition.streaming_player
-  ]
-
-  tags = {
-    Name        = "${var.project_name}-streaming-player-service"
-    Environment = var.environment_tags.trusted
-    Service     = "streaming-player"
+    Service     = "streaming-frontend"
   }
 }
 
 ################################################################################
-# Service Auto Scaling for Streaming Services
+# Service Auto Scaling - Backend and Frontend Only
 ################################################################################
 
-# Auto Scaling Target for Streaming API
-resource "aws_appautoscaling_target" "streaming_api" {
-  max_capacity       = 20
-  min_capacity       = 2
-  resource_id        = "service/${module.streaming_ecs_cluster.cluster_name}/${aws_ecs_service.streaming_api.name}"
+# Auto Scaling Target for Backend
+resource "aws_appautoscaling_target" "streaming_backend" {
+  max_capacity       = var.streaming_auto_scaling_config.backend.max_capacity
+  min_capacity       = var.streaming_auto_scaling_config.backend.min_capacity
+  resource_id        = "service/${module.streaming_ecs_cluster.cluster_name}/${aws_ecs_service.streaming_backend.name}"
   scalable_dimension = "ecs:service:DesiredCount"
   service_namespace  = "ecs"
 }
 
-# Auto Scaling Policy for Streaming API (CPU-based)
-resource "aws_appautoscaling_policy" "streaming_api_cpu" {
-  name               = "${var.project_name}-streaming-api-cpu-scaling"
+# Auto Scaling Policy for Backend (CPU-based)
+resource "aws_appautoscaling_policy" "streaming_backend_cpu" {
+  name               = "${var.project_name}-streaming-backend-cpu-scaling"
   policy_type        = "TargetTrackingScaling"
-  resource_id        = aws_appautoscaling_target.streaming_api.resource_id
-  scalable_dimension = aws_appautoscaling_target.streaming_api.scalable_dimension
-  service_namespace  = aws_appautoscaling_target.streaming_api.service_namespace
+  resource_id        = aws_appautoscaling_target.streaming_backend.resource_id
+  scalable_dimension = aws_appautoscaling_target.streaming_backend.scalable_dimension
+  service_namespace  = aws_appautoscaling_target.streaming_backend.service_namespace
 
   target_tracking_scaling_policy_configuration {
     predefined_metric_specification {
       predefined_metric_type = "ECSServiceAverageCPUUtilization"
     }
-    target_value = 60.0  # Lower threshold for streaming services
+    target_value = var.streaming_auto_scaling_config.backend.cpu_target
   }
 }
 
-# Auto Scaling Policy for Streaming API (Memory-based)
-resource "aws_appautoscaling_policy" "streaming_api_memory" {
-  name               = "${var.project_name}-streaming-api-memory-scaling"
-  policy_type        = "TargetTrackingScaling"
-  resource_id        = aws_appautoscaling_target.streaming_api.resource_id
-  scalable_dimension = aws_appautoscaling_target.streaming_api.scalable_dimension
-  service_namespace  = aws_appautoscaling_target.streaming_api.service_namespace
-
-  target_tracking_scaling_policy_configuration {
-    predefined_metric_specification {
-      predefined_metric_type = "ECSServiceAverageMemoryUtilization"
-    }
-    target_value = 70.0
-  }
-}
-
-# Auto Scaling Target for Streaming Control
-resource "aws_appautoscaling_target" "streaming_control" {
-  max_capacity       = 10
-  min_capacity       = 1
-  resource_id        = "service/${module.streaming_ecs_cluster.cluster_name}/${aws_ecs_service.streaming_control.name}"
+# Auto Scaling Target for Frontend
+resource "aws_appautoscaling_target" "streaming_frontend" {
+  max_capacity       = var.streaming_auto_scaling_config.frontend.max_capacity
+  min_capacity       = var.streaming_auto_scaling_config.frontend.min_capacity
+  resource_id        = "service/${module.streaming_ecs_cluster.cluster_name}/${aws_ecs_service.streaming_frontend.name}"
   scalable_dimension = "ecs:service:DesiredCount"
   service_namespace  = "ecs"
 }
 
-# Auto Scaling Policy for Streaming Control
-resource "aws_appautoscaling_policy" "streaming_control_cpu" {
-  name               = "${var.project_name}-streaming-control-cpu-scaling"
+# Auto Scaling Policy for Frontend (CPU-based)
+resource "aws_appautoscaling_policy" "streaming_frontend_cpu" {
+  name               = "${var.project_name}-streaming-frontend-cpu-scaling"
   policy_type        = "TargetTrackingScaling"
-  resource_id        = aws_appautoscaling_target.streaming_control.resource_id
-  scalable_dimension = aws_appautoscaling_target.streaming_control.scalable_dimension
-  service_namespace  = aws_appautoscaling_target.streaming_control.service_namespace
+  resource_id        = aws_appautoscaling_target.streaming_frontend.resource_id
+  scalable_dimension = aws_appautoscaling_target.streaming_frontend.scalable_dimension
+  service_namespace  = aws_appautoscaling_target.streaming_frontend.service_namespace
 
   target_tracking_scaling_policy_configuration {
     predefined_metric_specification {
       predefined_metric_type = "ECSServiceAverageCPUUtilization"
     }
-    target_value = 70.0
-  }
-}
-
-# Auto Scaling Target for Streaming Player
-resource "aws_appautoscaling_target" "streaming_player" {
-  max_capacity       = 15
-  min_capacity       = 2  # Always keep at least 2 for HA
-  resource_id        = "service/${module.streaming_ecs_cluster.cluster_name}/${aws_ecs_service.streaming_player.name}"
-  scalable_dimension = "ecs:service:DesiredCount"
-  service_namespace  = "ecs"
-}
-
-# Auto Scaling Policy for Streaming Player (CPU-based)
-resource "aws_appautoscaling_policy" "streaming_player_cpu" {
-  name               = "${var.project_name}-streaming-player-cpu-scaling"
-  policy_type        = "TargetTrackingScaling"
-  resource_id        = aws_appautoscaling_target.streaming_player.resource_id
-  scalable_dimension = aws_appautoscaling_target.streaming_player.scalable_dimension
-  service_namespace  = aws_appautoscaling_target.streaming_player.service_namespace
-
-  target_tracking_scaling_policy_configuration {
-    predefined_metric_specification {
-      predefined_metric_type = "ECSServiceAverageCPUUtilization"
-    }
-    target_value = 50.0  # Lower threshold for video processing
-  }
-}
-
-# Auto Scaling Policy for Streaming Player (Memory-based)
-resource "aws_appautoscaling_policy" "streaming_player_memory" {
-  name               = "${var.project_name}-streaming-player-memory-scaling"
-  policy_type        = "TargetTrackingScaling"
-  resource_id        = aws_appautoscaling_target.streaming_player.resource_id
-  scalable_dimension = aws_appautoscaling_target.streaming_player.scalable_dimension
-  service_namespace  = aws_appautoscaling_target.streaming_player.service_namespace
-
-  target_tracking_scaling_policy_configuration {
-    predefined_metric_specification {
-      predefined_metric_type = "ECSServiceAverageMemoryUtilization"
-    }
-    target_value = 60.0  # Lower threshold for video processing
-  }
-}
-
-################################################################################
-# CloudWatch Alarms for Streaming Services
-################################################################################
-
-# Streaming API Service Alarms
-resource "aws_cloudwatch_metric_alarm" "streaming_api_cpu_high" {
-  count               = var.enable_enhanced_monitoring ? 1 : 0
-  alarm_name          = "${var.project_name}-streaming-api-cpu-high"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "2"
-  metric_name         = "CPUUtilization"
-  namespace           = "AWS/ECS"
-  period              = "300"
-  statistic           = "Average"
-  threshold           = "80"
-  alarm_description   = "Streaming API service CPU utilization is high"
-  alarm_actions       = var.sns_alarm_topic_arn != null ? [var.sns_alarm_topic_arn] : []
-
-  dimensions = {
-    ServiceName = aws_ecs_service.streaming_api.name
-    ClusterName = module.streaming_ecs_cluster.cluster_name
-  }
-
-  tags = {
-    Name        = "${var.project_name}-streaming-api-cpu-alarm"
-    Environment = var.environment_tags.trusted
-  }
-}
-
-# Streaming Player Service Alarms
-resource "aws_cloudwatch_metric_alarm" "streaming_player_cpu_high" {
-  count               = var.enable_enhanced_monitoring ? 1 : 0
-  alarm_name          = "${var.project_name}-streaming-player-cpu-high"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "3"  # Longer evaluation for video processing
-  metric_name         = "CPUUtilization"
-  namespace           = "AWS/ECS"
-  period              = "300"
-  statistic           = "Average"
-  threshold           = "85"  # Higher threshold for video processing
-  alarm_description   = "Streaming player service CPU utilization is critically high"
-  alarm_actions       = var.sns_alarm_topic_arn != null ? [var.sns_alarm_topic_arn] : []
-
-  dimensions = {
-    ServiceName = aws_ecs_service.streaming_player.name
-    ClusterName = module.streaming_ecs_cluster.cluster_name
-  }
-
-  tags = {
-    Name        = "${var.project_name}-streaming-player-cpu-alarm"
-    Environment = var.environment_tags.trusted
-  }
-}
-
-# Video Processing Queue Depth Alarm
-resource "aws_cloudwatch_metric_alarm" "video_queue_depth" {
-  count               = var.enable_enhanced_monitoring ? 1 : 0
-  alarm_name          = "${var.project_name}-video-queue-depth-high"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "2"
-  metric_name         = "ApproximateNumberOfVisibleMessages"
-  namespace           = "AWS/SQS"
-  period              = "300"
-  statistic           = "Average"
-  threshold           = "100"  # Alert when queue has more than 100 videos
-  alarm_description   = "Video processing queue depth is high - may need more processing capacity"
-  alarm_actions       = var.sns_alarm_topic_arn != null ? [var.sns_alarm_topic_arn] : []
-
-  dimensions = {
-    QueueName = module.streaming_video_queue.queue_name
-  }
-
-  tags = {
-    Name        = "${var.project_name}-video-queue-depth-alarm"
-    Environment = var.environment_tags.trusted
-  }
-}
-
-# ALB Target Health Alarm
-resource "aws_cloudwatch_metric_alarm" "streaming_alb_unhealthy_targets" {
-  count               = var.enable_enhanced_monitoring ? 1 : 0
-  alarm_name          = "${var.project_name}-streaming-alb-unhealthy-targets"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = "2"
-  metric_name         = "UnHealthyHostCount"
-  namespace           = "AWS/ApplicationELB"
-  period              = "300"
-  statistic           = "Average"
-  threshold           = "0"
-  alarm_description   = "Streaming ALB has unhealthy targets"
-  alarm_actions       = var.sns_alarm_topic_arn != null ? [var.sns_alarm_topic_arn] : []
-
-  dimensions = {
-    LoadBalancer = module.streaming_application_load_balancer.alb_arn
-  }
-
-  tags = {
-    Name        = "${var.project_name}-streaming-alb-unhealthy-alarm"
-    Environment = var.environment_tags.trusted
+    target_value = var.streaming_auto_scaling_config.frontend.cpu_target
   }
 }
