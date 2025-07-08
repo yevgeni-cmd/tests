@@ -349,3 +349,40 @@ resource "aws_iam_role_policy" "trusted_streaming_ecr_access" {
 
   depends_on = [module.trusted_streaming_host]
 }
+
+# Enhanced ECS permissions for trusted DevOps host (to manage ECS)
+resource "aws_iam_role_policy" "trusted_devops_ecs_management" {
+  name = "ecs-management-access"
+  role = split("/", module.trusted_devops_host.iam_role_arn)[1]
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ecs:*",
+          "application-autoscaling:*",
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "logs:DescribeLogGroups",
+          "logs:DescribeLogStreams"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "iam:PassRole"
+        ]
+        Resource = [
+          module.iot_ecs_cluster.execution_role_arn,
+          module.iot_ecs_cluster.task_role_arn
+        ]
+      }
+    ]
+  })
+
+  depends_on = [module.trusted_devops_host, module.iot_ecs_cluster]
+}

@@ -1,6 +1,4 @@
 # --------------------------------------------------------------------------------------------------
-# routes.tf
-#
 # This file defines the VPC Peering and all TGW/IGW/NAT/Peering routes for the project.
 # CORRECTED: Module names now match the project's naming convention.
 # --------------------------------------------------------------------------------------------------
@@ -324,6 +322,17 @@ resource "aws_route" "trusted_jacob_to_devops" {
   ]
 }
 
+resource "aws_route" "trusted_iot_vpn_return_path" {
+  provider               = aws.primary
+  route_table_id         = module.trusted_vpc_iot.private_route_table_id
+  destination_cidr_block = var.trusted_vpn_client_cidr
+  transit_gateway_id     = module.trusted_tgw.tgw_id
+
+  depends_on = [
+    module.trusted_tgw,
+    module.trusted_vpc_iot.tgw_attachment_id
+  ]
+}
 
 # --- Add return routes in spoke VPCs for untrusted VPN pool
 resource "aws_route" "untrusted_spoke_return_path" {
@@ -388,4 +397,78 @@ resource "aws_route" "trusted_devops_private_nat" {
   route_table_id         = module.trusted_vpc_devops.private_route_table_id
   destination_cidr_block = "0.0.0.0/0"
   nat_gateway_id         = module.trusted_vpc_devops.nat_gateway_id
+}
+
+
+################################################################################
+# Streaming VPC Additional Routing Rules (ADD TO EXISTING routes.tf)
+################################################################################
+
+# Add return routes for VPN clients to reach streaming VPC
+resource "aws_route" "trusted_streaming_vpn_return_path" {
+  provider               = aws.primary
+  route_table_id         = module.trusted_vpc_streaming.private_route_table_id
+  destination_cidr_block = var.trusted_vpn_client_cidr
+  transit_gateway_id     = module.trusted_tgw.tgw_id
+
+  depends_on = [
+    module.trusted_tgw,
+    module.trusted_vpc_streaming.tgw_attachment_id
+  ]
+}
+
+# Route from streaming VPC to scrub VPC (for receiving processed streams)
+resource "aws_route" "trusted_streaming_to_scrub" {
+  provider               = aws.primary
+  route_table_id         = module.trusted_vpc_streaming.private_route_table_id
+  destination_cidr_block = var.trusted_vpc_cidrs["streaming_scrub"]
+  transit_gateway_id     = module.trusted_tgw.tgw_id
+
+  depends_on = [
+    module.trusted_tgw,
+    module.trusted_vpc_streaming.tgw_attachment_id,
+    module.trusted_vpc_streaming_scrub.tgw_attachment_id
+  ]
+}
+
+# Route from streaming VPC to Jacob VPC (for API communication)
+resource "aws_route" "trusted_streaming_to_jacob" {
+  provider               = aws.primary
+  route_table_id         = module.trusted_vpc_streaming.private_route_table_id
+  destination_cidr_block = var.trusted_vpc_cidrs["jacob_api_gw"]
+  transit_gateway_id     = module.trusted_tgw.tgw_id
+
+  depends_on = [
+    module.trusted_tgw,
+    module.trusted_vpc_streaming.tgw_attachment_id,
+    module.trusted_vpc_jacob.tgw_attachment_id
+  ]
+}
+
+# Route from Jacob VPC to streaming VPC (for API callbacks)
+resource "aws_route" "trusted_jacob_to_streaming" {
+  provider               = aws.primary
+  route_table_id         = module.trusted_vpc_jacob.private_route_table_id
+  destination_cidr_block = var.trusted_vpc_cidrs["streaming"]
+  transit_gateway_id     = module.trusted_tgw.tgw_id
+
+  depends_on = [
+    module.trusted_tgw,
+    module.trusted_vpc_jacob.tgw_attachment_id,
+    module.trusted_vpc_streaming.tgw_attachment_id
+  ]
+}
+
+# Route from scrub VPC to streaming VPC (for forwarding processed content)
+resource "aws_route" "trusted_scrub_to_streaming" {
+  provider               = aws.primary
+  route_table_id         = module.trusted_vpc_streaming_scrub.private_route_table_id
+  destination_cidr_block = var.trusted_vpc_cidrs["streaming"]
+  transit_gateway_id     = module.trusted_tgw.tgw_id
+
+  depends_on = [
+    module.trusted_tgw,
+    module.trusted_vpc_streaming_scrub.tgw_attachment_id,
+    module.trusted_vpc_streaming.tgw_attachment_id
+  ]
 }

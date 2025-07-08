@@ -1,5 +1,5 @@
 # ----------------------------------------------------------------
-#                 Terraform Variables Configuration
+#                 Updated Terraform Variables Configuration
 # ----------------------------------------------------------------
 
 # --- AWS Configuration ---
@@ -18,51 +18,114 @@ trusted_vpn_server_cert_arn = "arn:aws:acm:il-central-1:728951503198:certificate
 untrusted_vpn_server_cert_arn = "arn:aws:acm:il-central-1:728951503198:certificate/0c87fe07-ed4d-4810-b069-f6c6fe8c2f92"
 
 # Use custom AMIs for EC2 instances
-# Set to true to enable custom AMIs
-# If false, default AMIs will be used based on the instance_os variable
 use_custom_amis = true
-# Custom AMI IDs (replace with your actual AMI IDs)
 custom_standard_ami_id = "ami-0ea2fce7f7afb4f4c"
 
-# Instance type configurations (customize as needed)
+# Instance type configurations
 instance_types = {
   # Untrusted environment
-  untrusted_ingress    = "c5.large"   # Upgrade for high-bandwidth streaming ingress
-  untrusted_scrub      = "t3.micro"    # Minimal - just traffic forwarding
-  untrusted_devops     = "t3.medium"   # DevOps management
+  untrusted_ingress    = "c5.large"   
+  untrusted_scrub      = "t3.micro"    
+  untrusted_devops     = "t3.medium"   
   
   # Trusted environment
-  trusted_scrub        = "c5.large"    # Container processing workload
-  trusted_streaming    = "c5.large"    # Default (will be overridden if GPU enabled)
-  trusted_devops       = "t3.medium"   # DevOps management
+  trusted_scrub        = "c5.large"    
+  trusted_streaming    = "c5.large"    
+  trusted_devops       = "t3.medium"   
 }
 
 # GPU configuration for streaming
-use_gpu_for_streaming = true          # Set to true to enable GPU
-gpu_instance_type     = "g5.xlarge"   # GPU instance type when enabled
-
-# GPU-enabled custom AMI (create this after building GPU AMI)
-custom_gpu_ami_id = "ami-04e22fc5618e54eac"  # Replace with your GPU AMI ID when available
+use_gpu_for_streaming = true          
+gpu_instance_type     = "g5.xlarge"   
+custom_gpu_ami_id = "ami-04e22fc5618e54eac"  
 
 # UDP ports for SRT streaming
 srt_udp_ports = [8890]
-
-# --- Optional: SAML/MFA Configuration ---
-# vpn_authentication_type    = "saml"
-# saml_identity_provider_arn = "arn:aws:iam::123456789012:saml-provider/YourIdPName"
-
 
 # Azure DevOps Agent Configuration
 enable_ado_agents      = true
 ado_organization_url   = "https://dev.azure.com/cloudburstnet"
 ado_agent_pool_name    = "Self-Hosted-AWS"
 ado_pat_secret_name    = "poc-ado-pat"           
-
-# Auto-deployment configuration
-enable_auto_deployment         = false
-deployment_ssh_key_secret_name = "poc-deployment-ssh-key"         # Will be created by Terraform
+     
 
 peering_udp_port = 50555
-
 trusted_asn = 64512
 untrusted_asn = 64513
+
+# ----------------------------------------------------------------
+# NEW IOT INFRASTRUCTURE CONFIGURATION
+# ----------------------------------------------------------------
+
+# --- RDS Configuration ---
+rds_instance_class      = "db.t3.micro"      # Start small, can scale up
+rds_multi_az           = false               # Set to true for production
+rds_deletion_protection = false              # Set to true for production
+
+# --- ALB Configuration ---
+# alb_certificate_arn = "arn:aws:acm:il-central-1:123456789012:certificate/your-cert-id"  # Optional SSL cert
+
+# --- ECS Configuration ---
+ecs_task_cpu        = 512                    # CPU units (256, 512, 1024, etc.)
+ecs_task_memory     = 1024                   # Memory in MB
+ecs_desired_count   = 1                      # Number of tasks per service
+
+# --- Cross-Region Configuration ---
+enable_cross_region_dns = true
+eu_region              = "eu-west-1"
+
+# --- Monitoring Configuration ---
+enable_enhanced_monitoring    = true
+cloudwatch_log_retention_days = 7
+# sns_alarm_topic_arn = "arn:aws:sns:il-central-1:123456789012:alerts"  # Optional
+
+# --- Networking Configuration ---
+enable_vpc_flow_logs     = false            # Set to true for enhanced security monitoring
+flow_logs_retention_days = 14
+
+# --- IoT RDS Configuration ---
+iot_rds_engine = "mysql"          # Options: mysql, postgres, mariadb, oracle-ee
+iot_rds_engine_version = "8.0.35"
+iot_rds_allocated_storage = 20          # Start small, can scale up
+iot_rds_max_storage = 100               # Max storage for IoT data
+
+# ----------------------------------------------------------------
+# STREAMING INFRASTRUCTURE CONFIGURATION
+# ----------------------------------------------------------------
+
+# --- Streaming RDS Configuration ---
+streaming_rds_instance_class      = "db.t3.small"     # Slightly larger for analytics
+streaming_rds_multi_az           = false              # Set to true for production
+streaming_rds_deletion_protection = false             # Set to true for production
+
+# --- Streaming ALB Configuration ---
+# streaming_alb_certificate_arn = "arn:aws:acm:il-central-1:123456789012:certificate/your-streaming-cert-id"  # Optional SSL cert
+
+# --- Streaming ECS Configuration ---
+streaming_task_cpu        = 1024                      # Higher CPU for streaming services
+streaming_task_memory     = 2048                      # Higher memory for streaming services
+streaming_player_cpu      = 2048                      # Higher CPU for video processing
+streaming_player_memory   = 4096                      # Higher memory for video processing
+streaming_desired_count   = 2                         # Higher count for streaming services
+streaming_player_desired_count = 2                    # Always keep at least 2 for HA
+
+# --- Streaming Queue Configuration ---
+streaming_queue_retention_days     = 14               # 14 days retention for video processing
+streaming_video_visibility_timeout = 300              # 5 minutes for video processing
+
+# --- Streaming Performance Configuration ---
+streaming_auto_scaling_target_cpu        = 60         # Lower CPU target for streaming
+streaming_auto_scaling_target_memory     = 70         # Memory target for streaming
+streaming_player_auto_scaling_target_cpu = 50         # Lower CPU target for video processing
+streaming_player_auto_scaling_target_memory = 60      # Lower memory target for video processing
+
+# --- Streaming Monitoring Configuration ---
+streaming_video_queue_threshold        = 100          # Alert when queue has >100 videos
+streaming_cpu_alarm_threshold          = 80           # CPU alarm threshold
+streaming_player_cpu_alarm_threshold   = 85           # Higher threshold for video 
+
+# --- Streaming RDS Configuration ---
+streaming_rds_engine            = "postgres"      # Different engine for streaming
+streaming_rds_engine_version    = "15.4"          # PostgreSQL version
+streaming_rds_allocated_storage = 50              # More storage for streaming data
+streaming_rds_max_storage      = 200             # Higher max storage
