@@ -2,7 +2,7 @@
 # RDS Database for Streaming Analytics
 ################################################################################
 
-# Security Group for Streaming RDS
+# Security Group for Streaming RDS - FIXED for VPN access
 resource "aws_security_group" "streaming_rds_sg" {
   provider    = aws.primary
   name        = "${var.project_name}-streaming-rds-sg"
@@ -30,13 +30,16 @@ resource "aws_security_group" "streaming_rds_sg" {
     ]
   }
 
-  # Allow inbound from VPN clients
+  # FIXED: Allow inbound from VPN clients AND DevOps VPC (due to SNAT)
   ingress {
-    description = "MySQL/Aurora from VPN clients"
+    description = "MySQL/Aurora from VPN clients and DevOps VPC"
     from_port   = 3306
     to_port     = 3306
     protocol    = "tcp"
-    cidr_blocks = [var.trusted_vpn_client_cidr]
+    cidr_blocks = [
+      var.trusted_vpn_client_cidr,           # Original VPN client CIDR
+      var.trusted_vpc_cidrs["devops"]        # DevOps VPC CIDR (SNAT source)
+    ]
   }
 
   # Allow inbound from streaming-docker subnet
@@ -97,7 +100,7 @@ module "streaming_rds_database" {
   # Monitoring
   performance_insights_enabled = true
   monitoring_interval         = 60
-  enabled_cloudwatch_logs_exports = ["error", "general", "slowquery"]
+  enabled_cloudwatch_logs_exports = ["postgresql"]
   
   # Alarms
   enable_cloudwatch_alarms    = true
@@ -225,9 +228,9 @@ module "streaming_ecs_cluster" {
   # CloudWatch logs
   log_retention_days = var.cloudwatch_log_retention_days
   
-  # IAM permissions for streaming services
+  # IAM permissions for streaming services - FIX: Pass actual secret ARNs
   secrets_arns = [
-    # Will be populated by RDS module
+    module.streaming_rds_database.master_user_secret_arn
   ]
   sqs_queue_arns = [
     module.streaming_video_queue.queue_arn,
@@ -246,46 +249,59 @@ module "streaming_ecs_cluster" {
 # Application Load Balancer for Streaming Services
 ################################################################################
 
-# Security Group for Streaming ALB
+# Security Group for Streaming ALB - FIXED for VPN access
 resource "aws_security_group" "streaming_alb_sg" {
   provider    = aws.primary
   name        = "${var.project_name}-streaming-alb-sg"
   description = "Security group for Streaming Application Load Balancer"
   vpc_id      = module.trusted_vpc_streaming.vpc_id
 
-  # Allow HTTPS from VPN clients
+  # FIXED: Allow HTTPS from VPN clients AND DevOps VPC (due to SNAT)
   ingress {
-    description = "HTTPS from VPN clients"
+    description = "HTTPS from VPN clients and DevOps VPC"
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
-    cidr_blocks = [var.trusted_vpn_client_cidr]
+    cidr_blocks = [
+      var.trusted_vpn_client_cidr,           # Original VPN client CIDR
+      var.trusted_vpc_cidrs["devops"]        # DevOps VPC CIDR (SNAT source)
+    ]
   }
 
-  # Allow HTTP from VPN clients
+  # FIXED: Allow HTTP from VPN clients AND DevOps VPC (due to SNAT)
   ingress {
-    description = "HTTP from VPN clients"
+    description = "HTTP from VPN clients and DevOps VPC"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = [var.trusted_vpn_client_cidr]
+    cidr_blocks = [
+      var.trusted_vpn_client_cidr,           # Original VPN client CIDR
+      var.trusted_vpc_cidrs["devops"]        # DevOps VPC CIDR (SNAT source)
+    ]
   }
 
-  # Allow streaming ports from VPN clients
+  # FIXED: Allow streaming ports from VPN clients AND DevOps VPC (due to SNAT)
   ingress {
-    description = "Streaming ports from VPN clients"
+    description = "Streaming ports from VPN clients and DevOps VPC"
     from_port   = 1935  # RTMP
     to_port     = 1935
     protocol    = "tcp"
-    cidr_blocks = [var.trusted_vpn_client_cidr]
+    cidr_blocks = [
+      var.trusted_vpn_client_cidr,           # Original VPN client CIDR
+      var.trusted_vpc_cidrs["devops"]        # DevOps VPC CIDR (SNAT source)
+    ]
   }
 
+  # FIXED: Allow HLS/DASH from VPN clients AND DevOps VPC (due to SNAT)
   ingress {
-    description = "HLS/DASH from VPN clients"
+    description = "HLS/DASH from VPN clients and DevOps VPC"
     from_port   = 8080
     to_port     = 8090
     protocol    = "tcp"
-    cidr_blocks = [var.trusted_vpn_client_cidr]
+    cidr_blocks = [
+      var.trusted_vpn_client_cidr,           # Original VPN client CIDR
+      var.trusted_vpc_cidrs["devops"]        # DevOps VPC CIDR (SNAT source)
+    ]
   }
 
   # Allow all outbound
@@ -399,7 +415,7 @@ module "streaming_application_load_balancer" {
 }
 
 ################################################################################
-# Security Group for Streaming ECS Services
+# Security Group for Streaming ECS Services - FIXED for VPN access
 ################################################################################
 
 resource "aws_security_group" "streaming_ecs_services_sg" {
@@ -417,31 +433,40 @@ resource "aws_security_group" "streaming_ecs_services_sg" {
     security_groups = [aws_security_group.streaming_alb_sg.id]
   }
 
-  # Allow inbound from VPN for direct access
+  # FIXED: Allow inbound from VPN for direct access (both client CIDR and DevOps VPC)
   ingress {
-    description = "HTTP from VPN clients"
+    description = "HTTP from VPN clients and DevOps VPC"
     from_port   = 3000
     to_port     = 8090
     protocol    = "tcp"
-    cidr_blocks = [var.trusted_vpn_client_cidr]
+    cidr_blocks = [
+      var.trusted_vpn_client_cidr,           # Original VPN client CIDR
+      var.trusted_vpc_cidrs["devops"]        # DevOps VPC CIDR (SNAT source)
+    ]
   }
 
-  # Allow RTMP streaming
+  # FIXED: Allow RTMP streaming from VPN clients AND DevOps VPC (due to SNAT)
   ingress {
-    description = "RTMP from VPN clients"
+    description = "RTMP from VPN clients and DevOps VPC"
     from_port   = 1935
     to_port     = 1935
     protocol    = "tcp"
-    cidr_blocks = [var.trusted_vpn_client_cidr]
+    cidr_blocks = [
+      var.trusted_vpn_client_cidr,           # Original VPN client CIDR
+      var.trusted_vpc_cidrs["devops"]        # DevOps VPC CIDR (SNAT source)
+    ]
   }
 
-  # Allow UDP for streaming protocols
+  # FIXED: Allow UDP for streaming protocols from VPN clients AND DevOps VPC (due to SNAT)
   ingress {
-    description = "UDP streaming from VPN"
+    description = "UDP streaming from VPN clients and DevOps VPC"
     from_port   = var.peering_udp_port
     to_port     = var.peering_udp_port
     protocol    = "udp"
-    cidr_blocks = [var.trusted_vpn_client_cidr]
+    cidr_blocks = [
+      var.trusted_vpn_client_cidr,           # Original VPN client CIDR
+      var.trusted_vpc_cidrs["devops"]        # DevOps VPC CIDR (SNAT source)
+    ]
   }
 
   # Allow all outbound

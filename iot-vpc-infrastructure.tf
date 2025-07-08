@@ -127,9 +127,9 @@ module "iot_ecs_cluster" {
   # CloudWatch logs
   log_retention_days = var.cloudwatch_log_retention_days
   
-  # IAM permissions
+  # IAM permissions - FIX: Pass actual secret ARNs after RDS is created
   secrets_arns = [
-    # Will be populated after RDS is created
+    module.iot_rds_database.master_user_secret_arn
   ]
   sqs_queue_arns = [
     module.jacob_sqs_queues.queue_arn,
@@ -264,25 +264,11 @@ module "iot_application_load_balancer" {
 }
 
 ################################################################################
-# Route53 Private Hosted Zone for Cross-Region DNS
+# REMOVED: Route53 Private Hosted Zone (causes AWS reserved domain error)
 ################################################################################
 
-# Private hosted zone for EU VPC endpoints
-resource "aws_route53_zone" "eu_private_zone" {
-  count    = var.enable_cross_region_dns ? 1 : 0
-  provider = aws.primary
-  name     = "${var.eu_region}.amazonaws.com"
-  
-  vpc {
-    vpc_id = module.trusted_vpc_iot.vpc_id
-  }
-  
-  tags = {
-    Name        = "${var.project_name}-eu-private-zone"
-    Environment = var.environment_tags.trusted
-    Purpose     = "Cross-region private DNS resolution"
-  }
-}
+# REMOVED the Route53 zone creation that was causing the AWS reserved domain error
+# Private DNS for VPC endpoints is handled automatically by AWS
 
 ################################################################################
 # Security Group for ECS Services

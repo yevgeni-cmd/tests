@@ -37,6 +37,35 @@ resource "aws_ecr_repository" "trusted_devops" {
   }
 }
 
+resource "aws_ecr_repository" "trusted_backend" {
+  name                 = "${var.project_name}/trusted-backend-images"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = {
+    Environment = var.environment_tags.trusted
+    Project     = var.project_name
+    Purpose     = "CI/CD Images"
+  }
+}
+resource "aws_ecr_repository" "trusted_frontend" {
+  name                 = "${var.project_name}/trusted-frontend-images"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = {
+    Environment = var.environment_tags.trusted
+    Project     = var.project_name
+    Purpose     = "CI/CD Images"
+  }
+}
+
 # =================================================================
 # ECR Repository Policies
 # Grants proper access for CI/CD and deployment workflows

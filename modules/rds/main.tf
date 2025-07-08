@@ -104,8 +104,11 @@ resource "aws_db_instance" "this" {
 
   # Multi-AZ & Performance
   multi_az               = var.multi_az
-  performance_insights_enabled = var.performance_insights_enabled
-  performance_insights_retention_period = var.performance_insights_retention_period
+  
+  # FIXED: Make Performance Insights conditional based on instance class
+  performance_insights_enabled = var.instance_class == "db.t3.micro" ? false : var.performance_insights_enabled
+  performance_insights_retention_period = var.instance_class == "db.t3.micro" ? null : var.performance_insights_retention_period
+  
   monitoring_interval    = var.monitoring_interval
   monitoring_role_arn   = var.monitoring_interval > 0 ? aws_iam_role.enhanced_monitoring[0].arn : null
 

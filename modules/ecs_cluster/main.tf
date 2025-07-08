@@ -86,14 +86,37 @@ resource "aws_iam_role_policy" "ecs_execution_custom_policy" {
         ]
         Resource = "*"
       },
-      {
+      # FIX: Only add secrets statement if there are secrets ARNs
+      length(var.secrets_arns) > 0 ? {
         Effect = "Allow"
         Action = [
           "secretsmanager:GetSecretValue"
         ]
         Resource = var.secrets_arns
-      }
+      } : null
     ]
+    # Filter out null statements
+    Statement = [for stmt in [
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:GetAuthorizationToken",
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "*"
+      },
+      length(var.secrets_arns) > 0 ? {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue"
+        ]
+        Resource = var.secrets_arns
+      } : null
+    ] : stmt if stmt != null]
   })
 }
 
@@ -119,6 +142,7 @@ resource "aws_iam_role" "ecs_task_role" {
 
 # Task role policy for application needs
 resource "aws_iam_role_policy" "ecs_task_policy" {
+  count = length(var.sqs_queue_arns) > 0 ? 1 : 0
   name = "${var.cluster_name}-ecs-task-policy"
   role = aws_iam_role.ecs_task_role.id
 

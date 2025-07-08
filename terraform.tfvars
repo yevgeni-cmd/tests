@@ -90,7 +90,7 @@ iot_rds_allocated_storage = 20          # Start small, can scale up
 iot_rds_max_storage = 100               # Max storage for IoT data
 
 # ----------------------------------------------------------------
-# STREAMING INFRASTRUCTURE CONFIGURATION
+# STREAMING INFRASTRUCTURE CONFIGURATION - FIXED VERSIONS
 # ----------------------------------------------------------------
 
 # --- Streaming RDS Configuration ---
@@ -124,8 +124,8 @@ streaming_video_queue_threshold        = 100          # Alert when queue has >10
 streaming_cpu_alarm_threshold          = 80           # CPU alarm threshold
 streaming_player_cpu_alarm_threshold   = 85           # Higher threshold for video 
 
-# --- Streaming RDS Configuration ---
+# --- Streaming RDS Configuration - FIXED POSTGRESQL VERSION ---
 streaming_rds_engine            = "postgres"      # Different engine for streaming
-streaming_rds_engine_version    = "15.4"          # PostgreSQL version
+streaming_rds_engine_version    = "17.4"          # FIXED: Valid PostgreSQL version
 streaming_rds_allocated_storage = 50              # More storage for streaming data
 streaming_rds_max_storage      = 200             # Higher max storage
