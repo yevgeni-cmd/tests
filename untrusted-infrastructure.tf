@@ -125,38 +125,11 @@ module "untrusted_devops_host" {
     ado_organization_url         = var.ado_organization_url
     ado_agent_pool_name          = var.ado_agent_pool_name
     ado_pat_secret_name          = var.enable_ado_agents ? aws_secretsmanager_secret.ado_pat[0].name : ""
-    deployment_ssh_key_secret_name = var.enable_auto_deployment ? aws_secretsmanager_secret.deployment_ssh_key[0].name : ""
-    enable_auto_deployment       = var.enable_auto_deployment
     environment_type             = "untrusted"
   }) : templatefile("${path.module}/templates/ecr-auto-login-ado.sh", {
     aws_region       = var.primary_region
     ecr_registry_url = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.primary_region}.amazonaws.com"
   })
-}
-
-# =================================================================
-# NON-ECR IAM POLICIES (Keep these here)
-# =================================================================
-
-# ADO Secrets access policy (NOT ECR related - keep this)
-resource "aws_iam_role_policy" "untrusted_devops_ado_secrets" {
-  count = var.enable_ado_agents ? 1 : 0
-  name  = "ado-secrets-access"
-  role  = "${var.project_name}-untrusted-devops-host-role"
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = ["secretsmanager:GetSecretValue"]
-        Resource = compact([
-          var.enable_ado_agents ? aws_secretsmanager_secret.ado_pat[0].arn : "",
-          var.enable_auto_deployment ? aws_secretsmanager_secret.deployment_ssh_key[0].arn : ""
-        ])
-      }
-    ]
-  })
-  depends_on = [module.untrusted_devops_host, aws_secretsmanager_secret.ado_pat, aws_secretsmanager_secret.deployment_ssh_key]
 }
 
 data "aws_iam_role" "untrusted_devops_host_role" {

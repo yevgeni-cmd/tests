@@ -64,6 +64,16 @@ resource "aws_network_acl_rule" "untrusted_ingress_inbound_ephemeral" {
   from_port      = 1024
   to_port        = 65535
 }
+resource "aws_network_acl_rule" "untrusted_ingress_inbound_ephemeral_udp" {
+  network_acl_id = aws_network_acl.untrusted_ingress.id
+  rule_number    = 135
+  egress         = false
+  protocol       = "17" # UDP
+  rule_action    = "allow"
+  cidr_block     = "0.0.0.0/0"
+  from_port      = 1024
+  to_port        = 65535
+}
 
 # --- Outbound Rules ---
 resource "aws_network_acl_rule" "untrusted_ingress_outbound_to_scrub" {
@@ -75,6 +85,28 @@ resource "aws_network_acl_rule" "untrusted_ingress_outbound_to_scrub" {
   cidr_block     = var.untrusted_vpc_cidrs["streaming_scrub"]
   from_port      = var.peering_udp_port  # Port 50555
   to_port        = var.peering_udp_port
+}
+
+resource "aws_network_acl_rule" "untrusted_ingress_outbound_udp_responses" {
+  network_acl_id = aws_network_acl.untrusted_ingress.id
+  rule_number    = 105
+  egress         = true
+  protocol       = "17" # UDP
+  rule_action    = "allow"
+  cidr_block     = "0.0.0.0/0"
+  from_port      = var.srt_udp_ports[0]  # 8890
+  to_port        = var.srt_udp_ports[0]
+}
+
+resource "aws_network_acl_rule" "untrusted_ingress_outbound_udp_ephemeral" {
+  network_acl_id = aws_network_acl.untrusted_ingress.id
+  rule_number    = 106
+  egress         = true
+  protocol       = "17" # UDP
+  rule_action    = "allow"
+  cidr_block     = "0.0.0.0/0"
+  from_port      = 1024
+  to_port        = 65535
 }
 
 resource "aws_network_acl_rule" "untrusted_ingress_outbound_ephemeral" {

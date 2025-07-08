@@ -12,7 +12,6 @@ module "trusted_tgw" {
 }
 
 # --- Trusted VPCs ---
-
 module "trusted_vpc_devops" {
   source     = "./modules/vpc"
   providers  = { aws = aws.primary }
@@ -44,23 +43,22 @@ module "trusted_vpc_streaming" {
   providers  = { aws = aws.primary }
   name       = "${var.project_name}-trusted-streaming-vod"
   cidr       = var.trusted_vpc_cidrs["streaming"]
-  azs        = ["${var.primary_region}a"]
+  azs        = ["${var.primary_region}a", "${var.primary_region}b"]  # Multiple AZs for ALB
   aws_region = var.primary_region
   tgw_id     = module.trusted_tgw.tgw_id
-  private_subnet_names = ["ecs-containers", "endpoints", "tgw-attach", "algorithms", "streaming-docker"]
+  
+  # Updated subnet configuration with ALB subnets
+  private_subnet_names = [
+    "ecs-containers",    # ECS containers subnet
+    "endpoints",         # VPC endpoints subnet
+    "tgw-attach",       # TGW attachment subnet
+    "algorithms",       # Algorithm processing subnet
+    "streaming-docker", # Docker streaming subnet
+    "alb-az-a",         # ALB subnet in AZ-a
+    "alb-az-b"          # ALB subnet in AZ-b
+  ]
+  
   vpc_endpoints = ["ecr.api", "ecr.dkr", "s3", "sqs"]
-}
-
-module "trusted_vpc_iot" {
-  source     = "./modules/vpc"
-  providers  = { aws = aws.primary }
-  name       = "${var.project_name}-trusted-iot-management"
-  cidr       = var.trusted_vpc_cidrs["iot_management"]
-  azs        = ["${var.primary_region}a"]
-  aws_region = var.primary_region
-  tgw_id     = module.trusted_tgw.tgw_id
-  private_subnet_names = ["ecs", "tgw-attach", "endpoints"]
-  vpc_endpoints        = ["ecr.api", "ecr.dkr", "sqs", "rds"]
 }
 
 module "trusted_vpc_jacob" {
@@ -71,8 +69,88 @@ module "trusted_vpc_jacob" {
   azs        = ["${var.primary_region}a"]
   aws_region = var.primary_region
   tgw_id     = module.trusted_tgw.tgw_id
-  private_subnet_names = ["api-gw", "tgw-attach", "endpoints"]
-  vpc_endpoints        = ["s3", "sqs"]
+  private_subnet_names = [
+    "api-gw",
+    "tgw-attach", 
+    "endpoints"]
+  vpc_endpoints = [
+    "s3",
+    "sqs"]
+}
+
+# IoT VPC to include ALB subnets in multiple AZs
+module "trusted_vpc_iot" {
+  source     = "./modules/vpc"
+  providers  = { aws = aws.primary }
+  name       = "${var.project_name}-trusted-iot-management"
+  cidr       = var.trusted_vpc_cidrs["iot_management"]
+  azs        = ["${var.primary_region}a", "${var.primary_region}b"]  # Multiple AZs for ALB
+  aws_region = var.primary_region
+  tgw_id     = module.trusted_tgw.tgw_id
+  
+  # Updated subnet configuration per requirements
+  private_subnet_names = [
+    "ecs",           # ECS containers subnet
+    "endpoints",     # VPC endpoints subnet
+    "tgw-attach",    # TGW attachment subnet
+    "alb-az-a",      # ALB subnet in AZ-a
+    "alb-az-b"       # ALB subnet in AZ-b
+  ]
+  
+  vpc_endpoints = ["ecr.api", "ecr.dkr", "sqs", "rds"]
+}
+
+module "jacob_sqs_queues" {
+  source = "./modules/sqs_queue"
+  providers = { aws = aws.primary }
+  
+  queue_name                    = "${var.project_name}-jacob-untrusted-messages"
+  delay_seconds                = 0
+  max_message_size             = 262144
+  message_retention_seconds    = 1209600  # 14 days
+  visibility_timeout_seconds   = 30
+  receive_wait_time_seconds    = 20
+  
+  # Dead Letter Queue
+  enable_dlq                   = true
+  max_receive_count           = 3
+  dlq_message_retention_seconds = 345600  # 4 days
+  
+  # Encryption
+  kms_master_key_id = "alias/aws/sqs"
+  
+  # Monitoring
+  enable_cloudwatch_alarms     = true
+  high_message_count_threshold = 1000
+  alarm_actions               = []  # Add SNS topic ARNs if needed
+  
+  tags = {
+    Name        = "${var.project_name}-jacob-sqs"
+    Environment = var.environment_tags.trusted
+    Purpose     = "Jacob to Untrusted messaging"
+  }
+}
+
+# Additional queue for responses/acknowledgments
+module "jacob_response_sqs_queue" {
+  source = "./modules/sqs_queue"
+  providers = { aws = aws.primary }
+  
+  queue_name                   = "${var.project_name}-jacob-responses"
+  delay_seconds               = 0
+  visibility_timeout_seconds  = 30
+  message_retention_seconds   = 604800  # 7 days
+  
+  enable_dlq                  = true
+  max_receive_count          = 3
+  
+  kms_master_key_id = "alias/aws/sqs"
+  
+  tags = {
+    Name        = "${var.project_name}-jacob-responses"
+    Environment = var.environment_tags.trusted
+    Purpose     = "Jacob response messages"
+  }
 }
 
 # --- Trusted EC2 Instances ---
@@ -161,8 +239,6 @@ module "trusted_devops_host" {
     ado_organization_url         = var.ado_organization_url
     ado_agent_pool_name          = var.ado_agent_pool_name
     ado_pat_secret_name          = var.enable_ado_agents ? aws_secretsmanager_secret.ado_pat[0].name : ""
-    deployment_ssh_key_secret_name = var.enable_auto_deployment ? aws_secretsmanager_secret.deployment_ssh_key[0].name : ""
-    enable_auto_deployment       = var.enable_auto_deployment
     environment_type             = "trusted"
   }) : templatefile("${path.module}/templates/ecr-auto-login-ado.sh", {
     aws_region       = var.primary_region
@@ -170,35 +246,8 @@ module "trusted_devops_host" {
   })
 }
 
-# =================================================================
-# NON-ECR IAM POLICIES (Keep these here)
-# =================================================================
-
-# ADO Secrets access policy (NOT ECR related - keep this)
-resource "aws_iam_role_policy" "trusted_devops_ado_secrets" {
-  count = var.enable_ado_agents ? 1 : 0
-  name  = "ado-secrets-access"
-  role  = "${var.project_name}-trusted-devops-host-role"
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = ["secretsmanager:GetSecretValue"]
-        Resource = compact([
-          var.enable_ado_agents ? aws_secretsmanager_secret.ado_pat[0].arn : "",
-          var.enable_auto_deployment ? aws_secretsmanager_secret.deployment_ssh_key[0].arn : ""
-        ])
-      }
-    ]
-  })
-  depends_on = [module.trusted_devops_host, aws_secretsmanager_secret.ado_pat, aws_secretsmanager_secret.deployment_ssh_key]
-}
-
 data "aws_iam_role" "trusted_devops_host_role" {
   count = var.enable_ado_agents ? 1 : 0
   name  = "${var.project_name}-trusted-devops-host-role"
   depends_on = [module.trusted_devops_host]
 }
-
-# NOTE: ALL ECR-related policies have been moved to storage.tf

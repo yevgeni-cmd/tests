@@ -260,13 +260,6 @@ variable "ado_pat_secret_name" {
   default     = ""
 }
 
-# Deployment configuration
-variable "enable_auto_deployment" {
-  description = "Whether to enable auto-deployment capabilities from ADO agents"
-  type        = bool
-  default     = false
-}
-
 variable "deployment_ssh_key_secret_name" {
   description = "AWS Secrets Manager secret name containing SSH private key for deployments"
   type        = string
@@ -319,4 +312,317 @@ variable "environment_tags" {
     trusted   = "Trusted"
     untrusted = "Untrusted"
   }
+}
+
+################################################################################
+# RDS Configuration Variables
+################################################################################
+
+variable "rds_instance_class" {
+  description = "RDS instance class for IoT database"
+  type        = string
+  default     = "db.t3.micro"
+}
+
+variable "rds_multi_az" {
+  description = "Whether to enable Multi-AZ deployment for RDS"
+  type        = bool
+  default     = false
+}
+
+variable "rds_deletion_protection" {
+  description = "Whether to enable deletion protection for RDS"
+  type        = bool
+  default     = false
+}
+
+################################################################################
+# ALB Certificate Configuration
+################################################################################
+
+variable "alb_certificate_arn" {
+  description = "ARN of SSL certificate for Application Load Balancer (optional)"
+  type        = string
+  default     = null
+}
+
+################################################################################
+# ECS Configuration Variables
+################################################################################
+
+variable "ecs_task_cpu" {
+  description = "CPU units for ECS tasks (256, 512, 1024, 2048, 4096)"
+  type        = number
+  default     = 512
+}
+
+variable "ecs_task_memory" {
+  description = "Memory (MB) for ECS tasks"
+  type        = number
+  default     = 1024
+}
+
+variable "ecs_desired_count" {
+  description = "Desired number of ECS tasks"
+  type        = number
+  default     = 1
+}
+
+################################################################################
+# Cross-Region Configuration
+################################################################################
+
+variable "enable_cross_region_dns" {
+  description = "Whether to enable cross-region DNS resolution"
+  type        = bool
+  default     = true
+}
+
+variable "eu_region" {
+  description = "EU region for cross-region connectivity"
+  type        = string
+  default     = "eu-west-1"
+}
+
+################################################################################
+# Monitoring and Alerting
+################################################################################
+
+variable "enable_enhanced_monitoring" {
+  description = "Whether to enable enhanced monitoring for RDS and ECS"
+  type        = bool
+  default     = true
+}
+
+variable "cloudwatch_log_retention_days" {
+  description = "CloudWatch log retention period in days"
+  type        = number
+  default     = 7
+}
+
+variable "sns_alarm_topic_arn" {
+  description = "SNS topic ARN for CloudWatch alarms (optional)"
+  type        = string
+  default     = null
+}
+
+################################################################################
+# Networking Configuration
+################################################################################
+
+variable "enable_vpc_flow_logs" {
+  description = "Whether to enable VPC Flow Logs"
+  type        = bool
+  default     = false
+}
+
+variable "flow_logs_retention_days" {
+  description = "VPC Flow Logs retention period in days"
+  type        = number
+  default     = 14
+}
+
+
+################################################################################
+# Streaming RDS Configuration
+################################################################################
+
+variable "streaming_rds_instance_class" {
+  description = "RDS instance class for streaming analytics database"
+  type        = string
+  default     = "db.t3.small"  # Slightly larger for analytics
+}
+
+variable "streaming_rds_multi_az" {
+  description = "Whether to enable Multi-AZ deployment for streaming RDS"
+  type        = bool
+  default     = false
+}
+
+variable "streaming_rds_deletion_protection" {
+  description = "Whether to enable deletion protection for streaming RDS"
+  type        = bool
+  default     = false
+}
+
+################################################################################
+# Streaming ALB Configuration
+################################################################################
+
+variable "streaming_alb_certificate_arn" {
+  description = "ARN of SSL certificate for Streaming Application Load Balancer (optional)"
+  type        = string
+  default     = null
+}
+
+################################################################################
+# Streaming ECS Configuration
+################################################################################
+
+variable "streaming_task_cpu" {
+  description = "CPU units for streaming ECS tasks (256, 512, 1024, 2048, 4096)"
+  type        = number
+  default     = 1024  # Higher for streaming services
+}
+
+variable "streaming_task_memory" {
+  description = "Memory (MB) for streaming ECS tasks"
+  type        = number
+  default     = 2048  # Higher for streaming services
+}
+
+variable "streaming_player_cpu" {
+  description = "CPU units for streaming player tasks (higher for video processing)"
+  type        = number
+  default     = 2048  # Higher CPU for video processing
+}
+
+variable "streaming_player_memory" {
+  description = "Memory (MB) for streaming player tasks (higher for video processing)"
+  type        = number
+  default     = 4096  # Higher memory for video processing
+}
+
+variable "streaming_desired_count" {
+  description = "Desired number of streaming ECS tasks"
+  type        = number
+  default     = 2  # Higher for streaming services
+}
+
+variable "streaming_player_desired_count" {
+  description = "Desired number of streaming player tasks"
+  type        = number
+  default     = 2  # Always keep at least 2 for HA
+}
+
+################################################################################
+# Streaming Queue Configuration
+################################################################################
+
+variable "streaming_queue_retention_days" {
+  description = "Message retention period for streaming queues in days"
+  type        = number
+  default     = 14
+}
+
+variable "streaming_video_visibility_timeout" {
+  description = "Visibility timeout for video processing queue in seconds"
+  type        = number
+  default     = 300  # 5 minutes for video processing
+}
+
+################################################################################
+# Streaming Performance Configuration
+################################################################################
+
+variable "streaming_auto_scaling_target_cpu" {
+  description = "Target CPU utilization for streaming services auto scaling"
+  type        = number
+  default     = 60
+}
+
+variable "streaming_auto_scaling_target_memory" {
+  description = "Target memory utilization for streaming services auto scaling"
+  type        = number
+  default     = 70
+}
+
+variable "streaming_player_auto_scaling_target_cpu" {
+  description = "Target CPU utilization for streaming player auto scaling"
+  type        = number
+  default     = 50  # Lower for video processing
+}
+
+variable "streaming_player_auto_scaling_target_memory" {
+  description = "Target memory utilization for streaming player auto scaling"
+  type        = number
+  default     = 60  # Lower for video processing
+}
+
+################################################################################
+# Streaming Monitoring Configuration
+################################################################################
+
+variable "streaming_video_queue_threshold" {
+  description = "Threshold for video processing queue depth alarm"
+  type        = number
+  default     = 100
+}
+
+variable "streaming_cpu_alarm_threshold" {
+  description = "CPU utilization threshold for streaming service alarms"
+  type        = number
+  default     = 80
+}
+
+variable "streaming_player_cpu_alarm_threshold" {
+  description = "CPU utilization threshold for streaming player alarms"
+  type        = number
+  default     = 85
+}
+
+# IoT RDS Engine Configuration
+variable "iot_rds_engine" {
+  description = "Database engine for IoT RDS"
+  type        = string
+  default     = "mysql"
+  validation {
+    condition = contains([
+      "mysql", "postgres", "mariadb", 
+      "oracle-ee", "oracle-se2", "oracle-se1", "oracle-se",
+      "sqlserver-ee", "sqlserver-se", "sqlserver-ex", "sqlserver-web"
+    ], var.iot_rds_engine)
+    error_message = "RDS engine must be a valid AWS RDS engine type."
+  }
+}
+
+variable "iot_rds_engine_version" {
+  description = "Database engine version for IoT RDS"
+  type        = string
+  default     = "8.0"
+}
+
+variable "iot_rds_allocated_storage" {
+  description = "Initial allocated storage for IoT RDS (GB)"
+  type        = number
+  default     = 20
+}
+
+variable "iot_rds_max_storage" {
+  description = "Maximum allocated storage for IoT RDS (GB)"
+  type        = number
+  default     = 100
+}
+
+# Streaming RDS Engine Configuration
+variable "streaming_rds_engine" {
+  description = "Database engine for Streaming RDS"
+  type        = string
+  default     = "postgres"
+  validation {
+    condition = contains([
+      "mysql", "postgres", "mariadb", 
+      "oracle-ee", "oracle-se2", "oracle-se1", "oracle-se",
+      "sqlserver-ee", "sqlserver-se", "sqlserver-ex", "sqlserver-web"
+    ], var.streaming_rds_engine)
+    error_message = "RDS engine must be a valid AWS RDS engine type."
+  }
+}
+
+variable "streaming_rds_engine_version" {
+  description = "Database engine version for Streaming RDS"
+  type        = string
+  default     = "15.4"
+}
+
+variable "streaming_rds_allocated_storage" {
+  description = "Initial allocated storage for Streaming RDS (GB)"
+  type        = number
+  default     = 50
+}
+
+variable "streaming_rds_max_storage" {
+  description = "Maximum allocated storage for Streaming RDS (GB)"
+  type        = number
+  default     = 200
 }
