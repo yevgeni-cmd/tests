@@ -17,6 +17,11 @@ untrusted_ssh_key_name = "sky-untrusted"
 trusted_vpn_server_cert_arn = "arn:aws:acm:il-central-1:728951503198:certificate/e42ef4ec-db4c-4537-b16e-81d3c2c0b4e2"
 untrusted_vpn_server_cert_arn = "arn:aws:acm:il-central-1:728951503198:certificate/0c87fe07-ed4d-4810-b069-f6c6fe8c2f92"
 
+# To use SAML/MFA for VPN authentication, uncomment the following lines and
+# provide the ARN of the SAML Identity Provider you have configured in AWS IAM.
+vpn_authentication_type    = "saml"
+saml_identity_provider_arn = "arn:aws:iam::728951503198:saml-provider/sky-poc"
+
 # Use custom AMIs for EC2 instances
 use_custom_amis = true
 custom_standard_ami_id = "ami-0ea2fce7f7afb4f4c"
