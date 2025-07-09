@@ -58,7 +58,7 @@ module "trusted_vpc_streaming" {
     "alb-az-b"          # ALB subnet in AZ-b
   ]
   
-  vpc_endpoints = ["ecr.api", "ecr.dkr", "s3", "sqs", "secretsmanager"]
+  vpc_endpoints = ["ecr.api", "ecr.dkr", "s3", "sqs", "secretsmanager", "logs"]
 }
 
 module "trusted_vpc_jacob" {
@@ -97,7 +97,7 @@ module "trusted_vpc_iot" {
     "alb-az-b"       # ALB subnet in AZ-b
   ]
   
-  vpc_endpoints = ["ecr.api", "ecr.dkr", "sqs", "rds"]
+  vpc_endpoints = ["ecr.api", "ecr.dkr", "sqs", "rds", "logs", "secretsmanager"]
 }
 
 module "jacob_sqs_queues" {

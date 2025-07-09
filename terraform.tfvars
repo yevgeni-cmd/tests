@@ -149,8 +149,8 @@ streaming_services = {
   }
   frontend = {
     image_name       = "streaming-frontend"     # Maps to trusted-frontend-images ECR
-    container_port   = 3000
-    health_check_path = "/health"
+    container_port   = 8080
+    health_check_path = "/"
     cpu             = 512
     memory          = 1024
     desired_count   = 1
@@ -180,33 +180,3 @@ streaming_auto_scaling_config = {
     memory_target = 80
   }
 }
-
-# ----------------------------------------------------------------
-# DEPLOYMENT WORKFLOW
-# ----------------------------------------------------------------
-
-# 1. Build and push your images:
-#    docker build -t streaming-backend ./backend
-#    docker tag streaming-backend:latest $ECR_REGISTRY/poc/trusted-backend-images:v1.0.0
-#    docker push $ECR_REGISTRY/poc/trusted-backend-images:v1.0.0
-#
-#    docker build -t streaming-frontend ./frontend
-#    docker tag streaming-frontend:latest $ECR_REGISTRY/poc/trusted-frontend-images:v1.0.0
-#    docker push $ECR_REGISTRY/poc/trusted-frontend-images:v1.0.0
-
-# 2. Update image tags above when deploying new versions
-
-# 3. Apply changes:
-#    terraform apply -var-file=terraform.tfvars
-
-# ----------------------------------------------------------------
-# ACCESS ENDPOINTS
-# ----------------------------------------------------------------
-# Backend API:  http://streaming-alb-dns/api/*    -> Backend:8080
-# Frontend:     http://streaming-alb-dns/*        -> Frontend:3000
-
-# ----------------------------------------------------------------
-# ECR REPOSITORY MAPPING
-# ----------------------------------------------------------------
-# streaming-backend  -> poc/trusted-backend-images
-# streaming-frontend -> poc/trusted-frontend-images

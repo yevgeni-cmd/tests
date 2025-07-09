@@ -78,7 +78,7 @@ variable "master_user_secret_kms_key_id" {
 variable "port" {
   description = "Database port"
   type        = number
-  default     = 3306
+  default     = 5432
 }
 
 variable "db_subnet_group_name" {

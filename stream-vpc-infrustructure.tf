@@ -12,8 +12,8 @@ resource "aws_security_group" "streaming_rds_sg" {
   # Allow inbound from ECS containers
   ingress {
     description = "MySQL/Aurora from ECS containers"
-    from_port   = 3306
-    to_port     = 3306
+    from_port   = 5432
+    to_port     = 5432
     protocol    = "tcp"
     cidr_blocks = [module.trusted_vpc_streaming.private_subnets_by_name["ecs-containers"].cidr_block]
   }
@@ -21,8 +21,8 @@ resource "aws_security_group" "streaming_rds_sg" {
   # Allow inbound from ALB subnets
   ingress {
     description = "MySQL/Aurora from ALB subnets"
-    from_port   = 3306
-    to_port     = 3306
+    from_port   = 5432
+    to_port     = 5432
     protocol    = "tcp"
     cidr_blocks = [
       module.trusted_vpc_streaming.private_subnets_by_name["alb-az-a"].cidr_block,
@@ -33,8 +33,8 @@ resource "aws_security_group" "streaming_rds_sg" {
   # FIXED: Allow inbound from VPN clients AND DevOps VPC (due to SNAT)
   ingress {
     description = "MySQL/Aurora from VPN clients and DevOps VPC"
-    from_port   = 3306
-    to_port     = 3306
+    from_port   = 5432
+    to_port     = 5432
     protocol    = "tcp"
     cidr_blocks = [
       var.trusted_vpn_client_cidr,           # Original VPN client CIDR
@@ -45,8 +45,8 @@ resource "aws_security_group" "streaming_rds_sg" {
   # Allow inbound from streaming-docker subnet
   ingress {
     description = "MySQL/Aurora from streaming hosts"
-    from_port   = 3306
-    to_port     = 3306
+    from_port   = 5432
+    to_port     = 5432
     protocol    = "tcp"
     cidr_blocks = [module.trusted_vpc_streaming.private_subnets_by_name["streaming-docker"].cidr_block]
   }
@@ -410,7 +410,7 @@ resource "aws_security_group" "streaming_ecs_services_sg" {
   # Allow inbound from ALB
   ingress {
     description     = "HTTP from Streaming ALB"
-    from_port       = 3000
+    from_port       = 8080
     to_port         = 8090
     protocol        = "tcp"
     security_groups = [aws_security_group.streaming_alb_sg.id]
@@ -419,7 +419,7 @@ resource "aws_security_group" "streaming_ecs_services_sg" {
   # FIXED: Allow inbound from VPN for direct access (both client CIDR and DevOps VPC)
   ingress {
     description = "HTTP from VPN clients and DevOps VPC"
-    from_port   = 3000
+    from_port   = 8080
     to_port     = 8090
     protocol    = "tcp"
     cidr_blocks = [

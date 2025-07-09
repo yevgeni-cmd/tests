@@ -85,7 +85,6 @@ resource "aws_lb_listener" "https" {
   }
 }
 
-# HTTP Listener (for internal ALBs without SSL) - FIXED
 resource "aws_lb_listener" "http_internal" {
   count             = var.internal && var.certificate_arn == null ? 1 : 0
   load_balancer_arn = aws_lb.this.arn

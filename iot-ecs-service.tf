@@ -116,7 +116,7 @@ resource "aws_ecs_task_definition" "iot_dashboard" {
       
       portMappings = [
         {
-          containerPort = 3000
+          containerPort = 8080
           protocol      = "tcp"
         }
       ]
@@ -128,7 +128,7 @@ resource "aws_ecs_task_definition" "iot_dashboard" {
         },
         {
           name  = "PORT"
-          value = "3000"
+          value = "8080"
         },
         {
           name  = "API_BASE_URL"
@@ -148,7 +148,7 @@ resource "aws_ecs_task_definition" "iot_dashboard" {
       healthCheck = {
         command = [
           "CMD-SHELL",
-          "curl -f http://localhost:3000/ || exit 1"
+          "curl -f http://localhost:8080/ || exit 1"
         ]
         interval    = 30
         timeout     = 5
@@ -236,7 +236,7 @@ resource "aws_ecs_service" "iot_dashboard" {
   load_balancer {
     target_group_arn = module.iot_application_load_balancer.target_group_arns["iot_dashboard"]
     container_name   = "iot-dashboard"
-    container_port   = 3000
+    container_port   = 8080
   }
   
   # CORRECT: deployment_controller block (not deployment_configuration)

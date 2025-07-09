@@ -565,7 +565,7 @@ variable "streaming_player_cpu_alarm_threshold" {
 variable "iot_rds_engine" {
   description = "Database engine for IoT RDS"
   type        = string
-  default     = "mysql"
+  default     = "postgres"
   validation {
     condition = contains([
       "mysql", "postgres", "mariadb", 
@@ -669,8 +669,8 @@ variable "streaming_services" {
     }
     frontend = {
       image_name       = "streaming-frontend"
-      container_port   = 3000
-      health_check_path = "/health"
+      container_port   = 8080
+      health_check_path = "/"
       cpu             = 512
       memory          = 1024
       desired_count   = 1

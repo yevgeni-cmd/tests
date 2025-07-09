@@ -12,8 +12,8 @@ resource "aws_security_group" "rds_sg" {
   # Allow inbound from ECS containers
   ingress {
     description = "MySQL/Aurora from ECS"
-    from_port   = 3306
-    to_port     = 3306
+    from_port   = 5432
+    to_port     = 5432
     protocol    = "tcp"
     cidr_blocks = [module.trusted_vpc_iot.private_subnets_by_name["ecs"].cidr_block]
   }
@@ -21,8 +21,8 @@ resource "aws_security_group" "rds_sg" {
   # Allow inbound from ALB subnets (for management)
   ingress {
     description = "MySQL/Aurora from ALB subnets"
-    from_port   = 3306
-    to_port     = 3306
+    from_port   = 5432
+    to_port     = 5432
     protocol    = "tcp"
     cidr_blocks = [
       module.trusted_vpc_iot.private_subnets_by_name["alb-az-a"].cidr_block,
@@ -33,8 +33,8 @@ resource "aws_security_group" "rds_sg" {
   # Allow inbound from VPN clients
   ingress {
     description = "MySQL/Aurora from VPN clients"
-    from_port   = 3306
-    to_port     = 3306
+    from_port   = 5432
+    to_port     = 5432
     protocol    = "tcp"
     cidr_blocks = [var.trusted_vpn_client_cidr]
   }
@@ -234,7 +234,7 @@ module "iot_application_load_balancer" {
     
     iot_dashboard = {
       name              = "${var.project_name}-iot-dashboard-tg"
-      port              = 3000
+      port              = 8080
       protocol          = "HTTP"
       priority          = 200
       path_patterns     = ["/*"]
@@ -283,7 +283,7 @@ resource "aws_security_group" "ecs_services_sg" {
   # Allow inbound from ALB
   ingress {
     description     = "HTTP from ALB"
-    from_port       = 3000
+    from_port       = 8080
     to_port         = 8080
     protocol        = "tcp"
     security_groups = [aws_security_group.alb_sg.id]
@@ -292,7 +292,7 @@ resource "aws_security_group" "ecs_services_sg" {
   # Allow inbound from VPN for direct access
   ingress {
     description = "HTTP from VPN clients"
-    from_port   = 3000
+    from_port   = 8080
     to_port     = 8080
     protocol    = "tcp"
     cidr_blocks = [var.trusted_vpn_client_cidr]
