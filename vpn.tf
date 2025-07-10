@@ -60,9 +60,6 @@ module "untrusted_vpn_user_policy" {
 
 module "trusted_vpn" {
   source                 = "./modules/client_vpn"
-
-  # FIX: Explicitly pass the 'primary' provider configuration to the module.
-  # The module expects a provider with the local name 'aws.primary'.
   providers = {
     aws.primary = aws.primary
   }
@@ -79,6 +76,8 @@ module "trusted_vpn" {
   authorized_network_cidrs = var.trusted_vpc_cidrs
   route_network_cidrs      = local.trusted_vpn_route_networks
   security_group_ids       = [aws_security_group.trusted_vpn_sg.id]
+  dns_servers              = ["169.254.169.253", "8.8.8.8"]
+
 }
 
 # This module creates the IAM policy for users of the Trusted VPN.

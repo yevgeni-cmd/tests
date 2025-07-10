@@ -1,4 +1,4 @@
-# modules/application_load_balancer/variables.tf
+# modules/application_load_balancer/variables.tf - COMPLETE FIX
 variable "alb_name" {
   description = "Name of the Application Load Balancer"
   type        = string
@@ -38,7 +38,7 @@ variable "enable_cross_zone_load_balancing" {
 }
 
 variable "certificate_arn" {
-  description = "ARN of the SSL certificate for HTTPS listener"
+  description = "ARN of the SSL certificate for HTTPS listener (optional - can be null)"
   type        = string
   default     = null
 }
@@ -49,10 +49,10 @@ variable "ssl_policy" {
   default     = "ELBSecurityPolicy-TLS-1-2-2017-01"
 }
 
-variable "enable_http_listener" {
-  description = "Whether to create HTTP listener"
+variable "enable_https_listener" {
+  description = "Whether to enable HTTPS listener (will only create if certificate_arn is also provided)"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "target_groups" {
@@ -94,28 +94,4 @@ variable "tags" {
   description = "Tags to apply to resources"
   type        = map(string)
   default     = {}
-}
-
-variable "enable_https_listener" {
-  description = "Whether to create HTTPS listener (set to false if certificate_arn is computed)"
-  type        = bool
-  default     = true
-}
-
-variable "certificate_ready" {
-  description = "Whether the certificate is ready (not computed)"
-  type        = bool
-  default     = true
-}
-
-# variable "enable_https" {
-#   description = "Set to true to enable the HTTPS listener and related rules. Must be known at plan time."
-#   type        = bool
-#   default     = false
-# }
-
-variable "enable_private_ca" {
-  description = "Whether to create a private certificate authority"
-  type        = bool
-  default     = true
 }

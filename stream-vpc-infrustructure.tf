@@ -319,7 +319,6 @@ resource "aws_security_group" "streaming_alb_sg" {
   }
 }
 
-
 module "streaming_application_load_balancer" {
   source = "./modules/application_load_balancer"
   providers = { aws = aws.primary }
@@ -333,15 +332,19 @@ module "streaming_application_load_balancer" {
     module.trusted_vpc_streaming.private_subnets_by_name["alb-az-a"].id,
     module.trusted_vpc_streaming.private_subnets_by_name["alb-az-b"].id
   ]
-  certificate_arn = var.enable_private_ca && can(aws_acm_certificate.streaming_internal.arn) ? aws_acm_certificate.streaming_internal.arn : var.streaming_alb_certificate_arn
-  enable_https_listener = var.streaming_alb_certificate_arn != null || var.enable_private_ca
-  ssl_policy      = "ELBSecurityPolicy-TLS-1-2-2017-01"
-
   
-  # Load balancer settings
+  # SIMPLIFIED: Pass certificate ARN directly (can be null)
+  certificate_arn = var.enable_private_ca ? (
+    length(aws_acm_certificate.streaming_internal) > 0 ? aws_acm_certificate.streaming_internal[0].arn : null
+  ) : var.streaming_alb_certificate_arn
+  
+  # SIMPLIFIED: Only depends on boolean variable (no computed values)
+  enable_https_listener = var.enable_private_ca
+  
+  ssl_policy = "ELBSecurityPolicy-TLS-1-2-2017-01"
+  
   enable_deletion_protection        = false
   enable_cross_zone_load_balancing = true
-  enable_http_listener             = true
   
   target_groups = {
     streaming_backend = {
@@ -363,7 +366,7 @@ module "streaming_application_load_balancer" {
       }
     }
     
-    streaming_frontend = {  # ✅ Matches ECS service load_balancer reference
+    streaming_frontend = {
       name              = "${var.project_name}-streaming-frontend-tg"
       port              = var.streaming_services.frontend.container_port
       protocol          = "HTTP"
@@ -383,7 +386,6 @@ module "streaming_application_load_balancer" {
     }
   }
   
-  # Logging
   enable_access_logs  = true
   log_retention_days  = var.cloudwatch_log_retention_days
   
@@ -393,7 +395,6 @@ module "streaming_application_load_balancer" {
     Purpose     = "Streaming Backend and Frontend Access"
   }
 }
-
 ################################################################################
 # Security Group for Streaming ECS Services - FIXED for VPN access
 ################################################################################

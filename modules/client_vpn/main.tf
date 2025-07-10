@@ -81,3 +81,15 @@ resource "aws_ec2_client_vpn_route" "this" {
     aws_ec2_client_vpn_authorization_rule.this
   ]
 }
+
+resource "aws_ec2_client_vpn_route" "dns_resolver" {
+  provider               = aws.primary
+  client_vpn_endpoint_id = aws_ec2_client_vpn_endpoint.this.id
+  destination_cidr_block = "169.254.169.253/32"
+  target_vpc_subnet_id   = var.target_vpc_subnet_id
+  description            = "Route to AWS DNS resolver"
+
+  depends_on = [
+    aws_ec2_client_vpn_network_association.this
+  ]
+}

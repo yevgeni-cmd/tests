@@ -201,14 +201,18 @@ module "iot_application_load_balancer" {
     module.trusted_vpc_iot.private_subnets_by_name["alb-az-b"].id
   ]
   
-  # FIXED: Use conditional logic for certificate
-  certificate_arn = var.enable_private_ca && can(aws_acm_certificate.iot_internal.arn) ? aws_acm_certificate.iot_internal.arn : var.alb_certificate_arn
-  enable_https_listener = var.alb_certificate_arn != null || var.enable_private_ca
-  ssl_policy      = "ELBSecurityPolicy-TLS-1-2-2017-01"
+  # SIMPLIFIED: Pass certificate ARN directly (can be null)
+  certificate_arn = var.enable_private_ca ? (
+    length(aws_acm_certificate.iot_internal) > 0 ? aws_acm_certificate.iot_internal[0].arn : null
+  ) : var.alb_certificate_arn
+  
+  # SIMPLIFIED: Only depends on boolean variable (no computed values)
+  enable_https_listener = var.enable_private_ca
+  
+  ssl_policy = "ELBSecurityPolicy-TLS-1-2-2017-01"
   
   enable_deletion_protection        = false
   enable_cross_zone_load_balancing = false
-  enable_http_listener             = true
 
   target_groups = {
     iot_api = {
@@ -250,8 +254,7 @@ module "iot_application_load_balancer" {
     }
   }
   
-  # Logging
-  enable_access_logs  = false  # Set to true if you want ALB access logs
+  enable_access_logs  = false
   log_retention_days  = var.cloudwatch_log_retention_days
   
   tags = {

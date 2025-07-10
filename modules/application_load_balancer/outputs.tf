@@ -1,3 +1,4 @@
+# modules/application_load_balancer/outputs.tf - SIMPLIFIED (NO COMPUTED DEPENDENCIES)
 output "alb_arn" {
   description = "ARN of the Application Load Balancer"
   value       = aws_lb.this.arn
@@ -27,11 +28,20 @@ output "target_group_arn_suffixes" {
   }
 }
 
+output "http_listener_arn" {
+  description = "ARN of the HTTP listener (always available)"
+  value       = aws_lb_listener.http.arn
+}
+
+output "https_listener_arn" {
+  description = "ARN of the HTTPS listener (only if HTTPS enabled)"
+  value       = var.enable_https_listener ? aws_lb_listener.https[0].arn : null
+}
+
 output "listener_arns" {
   description = "Map of listener ARNs"
   value = {
-    http  = var.enable_http_listener ? aws_lb_listener.http[0].arn : null
-    https = var.certificate_arn != null ? aws_lb_listener.https[0].arn : null
-    http_internal = var.internal && var.certificate_arn == null ? aws_lb_listener.http_internal[0].arn : null
+    http  = aws_lb_listener.http.arn
+    https = var.enable_https_listener ? aws_lb_listener.https[0].arn : null
   }
 }
