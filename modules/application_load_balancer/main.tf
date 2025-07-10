@@ -47,7 +47,6 @@ resource "aws_lb_target_group" "ecs" {
   tags = var.tags
 }
 
-# HTTP Listener (redirect to HTTPS) - FIXED
 resource "aws_lb_listener" "http" {
   count             = var.enable_http_listener ? 1 : 0
   load_balancer_arn = aws_lb.this.arn
@@ -65,9 +64,9 @@ resource "aws_lb_listener" "http" {
   }
 }
 
-# HTTPS Listener - FIXED
+# HTTPS Listener
 resource "aws_lb_listener" "https" {
-  count             = var.certificate_arn != null ? 1 : 0
+  count             = var.enable_private_ca ? 1 : 0
   load_balancer_arn = aws_lb.this.arn
   port              = "443"
   protocol          = "HTTPS"
@@ -86,27 +85,59 @@ resource "aws_lb_listener" "https" {
 }
 
 resource "aws_lb_listener" "http_internal" {
-  count             = var.internal && var.certificate_arn == null ? 1 : 0
+  count             = var.internal ? 1 : 0
+  load_balancer_arn = aws_lb.this.arn
+  port              = "80"
+  protocol          = "HTTP"
+  
+  default_action {
+    type = var.enable_private_ca ? "redirect" : "fixed-response"
+
+    dynamic "redirect" {
+      for_each = var.enable_private_ca ? [1] : []
+      content {
+        port        = "443"
+        protocol    = "HTTPS"
+        status_code = "HTTP_301"
+      }
+    }
+    dynamic "fixed_response" {
+      for_each = !var.enable_private_ca ? [1] : []
+      content {
+        content_type = "text/plain"
+        message_body = "Service is available on HTTPS only"
+        status_code  = "403"
+      }
+    }
+  }
+
+  tags = var.tags
+}
+
+resource "aws_lb_listener" "http_external" {
+  count             = var.internal ? 0 : 1
   load_balancer_arn = aws_lb.this.arn
   port              = "80"
   protocol          = "HTTP"
 
   default_action {
-    type = "fixed-response"
+    type = "redirect"
 
-    fixed_response {
-      content_type = "text/plain"
-      message_body = "Not Found"
-      status_code  = "404"
+    redirect {
+      port        = "443"
+      protocol    = "HTTPS"
+      status_code = "HTTP_301"
     }
   }
+
+  tags = var.tags
 }
 
 # Listener Rules for Target Groups
 resource "aws_lb_listener_rule" "ecs_rules" {
   for_each = var.target_groups
 
-  listener_arn = var.certificate_arn != null ? aws_lb_listener.https[0].arn : aws_lb_listener.http_internal[0].arn
+  listener_arn = var.enable_private_ca ? aws_lb_listener.https[0].arn : (var.internal ? aws_lb_listener.http_internal[0].arn : aws_lb_listener.http_external[0].arn)
   priority     = each.value.priority
 
   action {
@@ -129,7 +160,6 @@ resource "aws_lb_listener_rule" "ecs_rules" {
     }
   }
 }
-
 # CloudWatch Log Group for ALB Access Logs
 resource "aws_cloudwatch_log_group" "alb_logs" {
   count             = var.enable_access_logs ? 1 : 0

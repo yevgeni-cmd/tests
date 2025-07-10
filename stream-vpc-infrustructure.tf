@@ -319,7 +319,6 @@ resource "aws_security_group" "streaming_alb_sg" {
   }
 }
 
-# Simplified ALB configuration in stream-vpc-infrastructure.tf
 
 module "streaming_application_load_balancer" {
   source = "./modules/application_load_balancer"
@@ -330,24 +329,22 @@ module "streaming_application_load_balancer" {
   vpc_id             = module.trusted_vpc_streaming.vpc_id
   security_group_ids = [aws_security_group.streaming_alb_sg.id]
   
-  # Multi-AZ subnets
   subnet_ids = [
     module.trusted_vpc_streaming.private_subnets_by_name["alb-az-a"].id,
     module.trusted_vpc_streaming.private_subnets_by_name["alb-az-b"].id
   ]
-  
-  # SSL Configuration (optional)
-  certificate_arn = var.streaming_alb_certificate_arn
+  certificate_arn = var.enable_private_ca && can(aws_acm_certificate.streaming_internal.arn) ? aws_acm_certificate.streaming_internal.arn : var.streaming_alb_certificate_arn
+  enable_https_listener = var.streaming_alb_certificate_arn != null || var.enable_private_ca
   ssl_policy      = "ELBSecurityPolicy-TLS-1-2-2017-01"
+
   
   # Load balancer settings
   enable_deletion_protection        = false
   enable_cross_zone_load_balancing = true
   enable_http_listener             = true
   
-  # FIXED: Target group names must match ECS service references
   target_groups = {
-    streaming_backend = {  # ✅ Matches ECS service load_balancer reference
+    streaming_backend = {
       name              = "${var.project_name}-streaming-backend-tg"
       port              = var.streaming_services.backend.container_port
       protocol          = "HTTP"

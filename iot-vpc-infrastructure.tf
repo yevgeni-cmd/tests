@@ -192,26 +192,24 @@ module "iot_application_load_balancer" {
   providers = { aws = aws.primary }
   
   alb_name           = "${var.project_name}-iot-alb"
-  internal           = true  # Internal ALB for VPN access only
+  internal           = true
   vpc_id             = module.trusted_vpc_iot.vpc_id
   security_group_ids = [aws_security_group.alb_sg.id]
   
-  # Multi-AZ subnets for high availability
   subnet_ids = [
     module.trusted_vpc_iot.private_subnets_by_name["alb-az-a"].id,
     module.trusted_vpc_iot.private_subnets_by_name["alb-az-b"].id
   ]
   
-  # SSL Configuration (if you have a certificate)
-  certificate_arn = var.alb_certificate_arn  # Optional
+  # FIXED: Use conditional logic for certificate
+  certificate_arn = var.enable_private_ca && can(aws_acm_certificate.iot_internal.arn) ? aws_acm_certificate.iot_internal.arn : var.alb_certificate_arn
+  enable_https_listener = var.alb_certificate_arn != null || var.enable_private_ca
   ssl_policy      = "ELBSecurityPolicy-TLS-1-2-2017-01"
   
-  # Load balancer settings
   enable_deletion_protection        = false
-  enable_cross_zone_load_balancing = false  # Per requirement
+  enable_cross_zone_load_balancing = false
   enable_http_listener             = true
-  
-  # Target groups for different services
+
   target_groups = {
     iot_api = {
       name              = "${var.project_name}-iot-api-tg"

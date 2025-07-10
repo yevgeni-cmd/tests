@@ -232,7 +232,6 @@ module "trusted_devops_host" {
   allowed_egress_udp_ports = []
   allowed_egress_udp_cidrs = []
   
-  # RESTORED: User data script
   user_data = var.enable_ado_agents ? templatefile("${path.module}/templates/ado-agent-userdata.sh", {
     aws_region                    = var.primary_region
     ecr_registry_url             = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.primary_region}.amazonaws.com"

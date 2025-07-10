@@ -729,3 +729,31 @@ variable "streaming_auto_scaling_config" {
     }
   }
 }
+
+################################################################################
+# Private CA and Domain Configuration
+################################################################################
+
+variable "internal_domain" {
+  description = "Internal domain name for private services (e.g., internal.local, corp.internal)"
+  type        = string
+  default     = "corp.internal"
+}
+
+variable "organization_name" {
+  description = "Organization name for certificates"
+  type        = string
+  default     = "Your Organization"
+}
+
+variable "enable_private_ca" {
+  description = "Whether to create a private certificate authority"
+  type        = bool
+  default     = true
+}
+
+variable "ca_validity_years" {
+  description = "Number of years the CA certificate should be valid"
+  type        = number
+  default     = 10
+}

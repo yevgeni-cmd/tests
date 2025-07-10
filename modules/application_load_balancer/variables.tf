@@ -95,3 +95,27 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "enable_https_listener" {
+  description = "Whether to create HTTPS listener (set to false if certificate_arn is computed)"
+  type        = bool
+  default     = true
+}
+
+variable "certificate_ready" {
+  description = "Whether the certificate is ready (not computed)"
+  type        = bool
+  default     = true
+}
+
+# variable "enable_https" {
+#   description = "Set to true to enable the HTTPS listener and related rules. Must be known at plan time."
+#   type        = bool
+#   default     = false
+# }
+
+variable "enable_private_ca" {
+  description = "Whether to create a private certificate authority"
+  type        = bool
+  default     = true
+}

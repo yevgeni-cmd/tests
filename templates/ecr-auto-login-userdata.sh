@@ -5,23 +5,34 @@ exec > >(tee /var/log/ecr-auto-login.log | logger -t ecr-login -s 2>/dev/console
 
 echo "--- Setting up ECR Auto-Login for a specific user at $(date) ---"
 
-# --- Configuration ---
-# These variables should be replaced by your infrastructure tool (e.g., Terraform, CloudFormation)
-AWS_REGION="${aws_region}"
-ECR_REGISTRY="${ecr_registry_url}"
+# --- Configuration (Injected by Terraform) ---
+# These variables are replaced directly by Terraform's templatefile function.
+# Ensure your Terraform 'templatefile' call uses these exact lowercase names.
+# example: templatefile("...", { aws_region = "...", ecr_registry_url = "..." })
 
 # Specify the user who needs to pull Docker images.
 # This is typically 'ubuntu' on Ubuntu AMIs or 'ec2-user' on Amazon Linux 2.
 TARGET_USER="ubuntu"
 TARGET_USER_HOME="/home/$TARGET_USER"
 
+# --- Validation ---
+# Exit immediately if Terraform did not provide the required variables.
+if [ -z "${aws_region}" ] || [ -z "${ecr_registry_url}" ]; then
+    echo "❌ FATAL ERROR: The 'aws_region' or 'ecr_registry_url' variables were not passed correctly from Terraform."
+    echo "aws_region was: '${aws_region}'"
+    echo "ecr_registry_url was: '${ecr_registry_url}'"
+    exit 1
+fi
+echo "✅ Configuration received: REGION=${aws_region}, ECR_REGISTRY=${ecr_registry_url}"
+
+
 # --- Function to perform ECR login for the TARGET_USER ---
 ecr_login() {
-    echo "Attempting ECR login to $ECR_REGISTRY for user $TARGET_USER..."
+    echo "Attempting ECR login to ${ecr_registry_url} for user $TARGET_USER..."
 
     # Wait for AWS CLI to be ready
     for i in {1..60}; do
-        if aws sts get-caller-identity --region $AWS_REGION >/dev/null 2>&1; then
+        if aws sts get-caller-identity --region "${aws_region}" >/dev/null 2>&1; then
             echo "AWS credentials are now available."
             break
         fi
@@ -37,9 +48,7 @@ ecr_login() {
     # Perform ECR login with retry
     for attempt in {1..3}; do
         echo "ECR login attempt $attempt/3 for user $TARGET_USER..."
-        # The 'aws' command runs as root to get the password from the instance profile.
-        # The 'docker login' command is then run as the TARGET_USER via 'sudo -u'.
-        if aws ecr get-login-password --region $AWS_REGION | sudo -u "$TARGET_USER" docker login --username AWS --password-stdin $ECR_REGISTRY; then
+        if aws ecr get-login-password --region "${aws_region}" | sudo -u "$TARGET_USER" docker login --username AWS --password-stdin "${ecr_registry_url}"; then
             echo "SUCCESS: ECR login for user $TARGET_USER completed."
             return 0
         else
@@ -73,7 +82,7 @@ if ! docker info >/dev/null 2>&1; then
     exit 1
 fi
 
-# Add the target user to the 'docker' group to allow them to run Docker commands without sudo
+# Add the target user to the 'docker' group
 echo "Adding user '$TARGET_USER' to the 'docker' group..."
 if id "$TARGET_USER" &>/dev/null; then
     usermod -aG docker "$TARGET_USER"
@@ -91,25 +100,20 @@ else
 fi
 
 # --- Create persistent ECR login script for systemd timer ---
-# Note: We use << EOF (without quotes) to allow variable substitution for region and registry.
-# Shell variables like $(date) and $attempt are escaped with '\' to be interpreted when the script runs.
 echo "Creating renewal script at /usr/local/bin/ecr-login.sh"
 cat > /usr/local/bin/ecr-login.sh << EOF
 #!/bin/bash
-AWS_REGION="${aws_region}"
-ECR_REGISTRY="${ecr_registry_url}"
-TARGET_USER="ubuntu" # The user to perform the login for
+TARGET_USER="ubuntu"
 TARGET_USER_HOME="/home/\$TARGET_USER"
 
 echo "\$(date): Running scheduled ECR credential renewal for user \$TARGET_USER..."
 
-# Ensure the user's Docker config directory exists and is owned by them
 mkdir -p "\$TARGET_USER_HOME/.docker"
 chown -R "\$TARGET_USER:\$TARGET_USER" "\$TARGET_USER_HOME/.docker"
 
-# Perform login with retry
 for attempt in {1..3}; do
-    if aws ecr get-login-password --region \$AWS_REGION | sudo -u \$TARGET_USER docker login --username AWS --password-stdin \$ECR_REGISTRY; then
+    # The literal values for the region and registry are baked into this script by the parent.
+    if aws ecr get-login-password --region "${aws_region}" | sudo -u \$TARGET_USER docker login --username AWS --password-stdin "${ecr_registry_url}"; then
         echo "\$(date): ECR login renewal for \$TARGET_USER was successful."
         exit 0
     else
@@ -129,8 +133,6 @@ chmod +x /usr/local/bin/ecr-login.sh
 # --- Create systemd service and timer to refresh login credentials ---
 echo "Setting up systemd service and timer for ECR auto-login..."
 
-# The systemd service runs the script. It runs as root because the script
-# needs permission to use 'aws' with the instance role and 'sudo'.
 cat > /etc/systemd/system/ecr-login.service << 'EOF'
 [Unit]
 Description=ECR Login Credential Renewal Service
@@ -144,7 +146,6 @@ User=root
 RemainAfterExit=yes
 EOF
 
-# The systemd timer triggers the service periodically.
 cat > /etc/systemd/system/ecr-login.timer << 'EOF'
 [Unit]
 Description=Timer to periodically renew ECR login credentials

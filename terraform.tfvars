@@ -185,3 +185,12 @@ streaming_auto_scaling_config = {
     memory_target = 80
   }
 }
+
+# Internal domain for your services
+internal_domain = "sky.internal"
+
+# Organization details for certificates
+organization_name = "Sky PoC"
+
+# Enable private CA
+enable_private_ca = true

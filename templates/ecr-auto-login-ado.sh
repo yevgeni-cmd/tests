@@ -11,9 +11,19 @@ echo "--- Setting up ECR Auto-Login for ADO Agent ---"
 # --- Configuration ---
 # The user that the Azure DevOps agent runs as.
 ADO_AGENT_USER="adoagent"
-# These values should be replaced by your userdata templating engine (e.g., Terraform)
+# These values are replaced by Terraform's templatefile function.
 AWS_REGION="${aws_region}"
 ECR_REGISTRY="${ecr_registry_url}"
+
+# --- Validation (New) ---
+# Exit immediately if Terraform did not provide the required variables.
+if [ -z "$AWS_REGION" ] || [ -z "$ECR_REGISTRY" ]; then
+    echo "❌ FATAL ERROR: The 'aws_region' or 'ecr_registry_url' variables were not passed correctly from Terraform."
+    echo "AWS_REGION was: '$AWS_REGION'"
+    echo "ECR_REGISTRY was: '$ECR_REGISTRY'"
+    exit 1
+fi
+echo "✅ Configuration received: REGION=$AWS_REGION, ECR_REGISTRY=$ECR_REGISTRY"
 
 
 # --- Script Body ---
@@ -33,6 +43,7 @@ if ! systemctl is-active --quiet docker; then
 fi
 
 # Create the login script that will be called by the timer
+# The values for AWS_REGION and ECR_REGISTRY are "baked in" to this script.
 cat > /usr/local/bin/ecr-login-for-ado.sh << EOF
 #!/bin/bash
 # This script performs the actual login for the specified user.
@@ -40,8 +51,6 @@ cat > /usr/local/bin/ecr-login-for-ado.sh << EOF
 set -e
 
 ADO_AGENT_USER="$ADO_AGENT_USER"
-AWS_REGION="$AWS_REGION"
-ECR_REGISTRY="$ECR_REGISTRY"
 
 echo "[\$(date)]--- Starting ECR login for user: \$ADO_AGENT_USER ---"
 
@@ -51,10 +60,12 @@ if ! id "\$ADO_AGENT_USER" &>/dev/null; then
     exit 1
 fi
 
-# THE CORE FIX: Execute the docker login command as the adoagent user.
 # This ensures credentials are stored in /home/adoagent/.docker/config.json
 echo "[\$(date)] Getting ECR password and logging in as \$ADO_AGENT_USER..."
-sudo -u "\$ADO_AGENT_USER" bash -c "aws ecr get-login-password --region \$AWS_REGION | docker login --username AWS --password-stdin \$ECR_REGISTRY"
+
+# FIXED: The variables $AWS_REGION and $ECR_REGISTRY are now expanded by the
+# parent script, injecting their values directly into this command.
+sudo -u "\$ADO_AGENT_USER" bash -c "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}"
 
 echo "[\$(date)] ✅ ECR login successful for user: \$ADO_AGENT_USER"
 exit 0
